@@ -104,6 +104,21 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [taskAlertOpen, setTaskAlertOpen] = useState(false);
   const prevCountRef = useRef<number | null>(null);
   const didMountRef = useRef(false);
+  const [pendingUserCount, setPendingUserCount] = useState(0);
+
+  useEffect(() => {
+    const isAdminRole = user?.role === 'Admin' || (user?.role as string) === 'Administrator';
+    if (!isAdminRole) return;
+    const q = query(collection(db, 'users'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      let count = 0;
+      snapshot.forEach((docSnap) => {
+        if (docSnap.data().status === 'Pending') count++;
+      });
+      setPendingUserCount(count);
+    });
+    return unsub;
+  }, [user?.role]);
 
   // Close bell dropdown on outside click
   useEffect(() => {
@@ -205,6 +220,11 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
             <Link to="/admin" className={navLinkClass('/admin')}>
               <Shield className="w-5 h-5 mr-3" />
               Admin Panel
+              {pendingUserCount > 0 && (
+                <span className="ml-auto min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-red-500 text-white text-[11px] font-bold rounded-full animate-pulse">
+                  {pendingUserCount > 99 ? '99+' : pendingUserCount}
+                </span>
+              )}
             </Link>
           )}
         </nav>
