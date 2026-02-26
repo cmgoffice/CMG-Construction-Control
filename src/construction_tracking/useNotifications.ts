@@ -76,7 +76,7 @@ export const useNotifications = (user: {
     // --- Supervisor: SWOs assigned but not yet accepted ---
     if (role === 'Supervisor') {
         const pending = swos.filter(s =>
-            (s.status === 'Assigned' || s.status === 'Accepted') &&
+            s.status === 'Assigned' &&
             swoIsMineSupervisor(s)
         );
         pending.forEach(s => items.push({
@@ -84,7 +84,7 @@ export const useNotifications = (user: {
             label: `SWO ${s.swo_no || s.id}: ${s.work_name || ''}`,
             path: '/daily-report',
             type: 'assigned',
-            step: s.status === 'Assigned' ? 'รอรับงาน' : 'รับงานแล้ว – รอรายงาน',
+            step: 'รอรับงาน',
             targetId: s.id
         }));
 

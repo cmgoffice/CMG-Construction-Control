@@ -1,177 +1,289 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthRBACRouter';
-import { Lock, FileCheck, CheckCircle2, AlertTriangle, ShieldAlert, X } from 'lucide-react';
+import { Lock, FileCheck, CheckCircle2, ShieldAlert, X, Eye, FileText, Check, AlertCircle } from 'lucide-react';
 import { db } from './firebase';
-import { collection, onSnapshot, query, doc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, where } from 'firebase/firestore';
 
 // --- Part F: Propose Detail Site Work Completed Modal ---
-const ProposeDetailModal = ({ isOpen, onClose, swoData, onCmSubmit, onPmSubmit }: any) => {
+const ProposeDetailModal = ({ isOpen, onClose, swoData, onPmSubmit, onCdSubmit, onGmSubmit, onMdSubmit }: any) => {
     const { user } = useAuth();
-    const [cmNote, setCmNote] = useState(swoData?.cm_closure_note || '');
-    const [cmQuality, setCmQuality] = useState(swoData?.quality_score || '');
-    const [cmOnTime, setCmOnTime] = useState<'Yes' | 'No' | null>(swoData?.on_time || null);
-    const [cmDelay, setCmDelay] = useState(swoData?.delay_reason || '');
-    const [pmNote, setPmNote] = useState(swoData?.pm_closure_note || '');
+    const [pmNote, setPmNote] = useState('');
+    const [pmQuality, setPmQuality] = useState('');
+    const [pmOnTime, setPmOnTime] = useState<'Yes' | 'No' | null>(null);
+    const [pmDelay, setPmDelay] = useState('');
+    const [cdNote, setCdNote] = useState('');
+    const [reports, setReports] = useState<any[]>([]);
 
-    React.useEffect(() => {
+    useEffect(() => {
         if (swoData) {
-            setCmNote(swoData.cm_closure_note || '');
-            setCmQuality(swoData.quality_score || '');
-            setCmOnTime(swoData.on_time || null);
-            setCmDelay(swoData.delay_reason || '');
             setPmNote(swoData.pm_closure_note || '');
+            setPmQuality(swoData.quality_score || '');
+            setPmOnTime(swoData.on_time || null);
+            setPmDelay(swoData.delay_reason || '');
+            setCdNote(swoData.cd_closure_note || '');
         }
     }, [swoData]);
 
+    useEffect(() => {
+        if (isOpen && swoData?.id) {
+            const q = query(collection(db, "daily_reports"), where("swo_id", "==", swoData.id));
+            const unsub = onSnapshot(q, (snapshot) => {
+                const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+                fetched.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                setReports(fetched);
+            });
+            return unsub;
+        }
+    }, [isOpen, swoData?.id]);
+
     if (!isOpen || !swoData) return null;
 
+    let actualFinishDate = 'ยังไม่มีรายงาน';
+    let delayDays = '0';
+    let delayStatusText = 'อยู่ในระยะเวลาที่กำหนด';
+
+    if (reports.length > 0) {
+        actualFinishDate = reports[0].date;
+        if (swoData.planFinish && actualFinishDate) {
+            const plan = new Date(swoData.planFinish);
+            const actual = new Date(actualFinishDate);
+            const diffTime = actual.getTime() - plan.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays > 0) {
+                delayDays = diffDays.toString();
+                delayStatusText = `เกินกำหนด ${diffDays} วัน`;
+            }
+        }
+    }
+
+    const isPmReadonly = user?.role !== 'PM' && swoData.status !== 'PM Review';
+    const isCdReadonly = user?.role !== 'CD' && swoData.status !== 'CD Review';
+
     return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
-                <div className="flex justify-between items-center p-6 border-b border-gray-200">
-                    <h2 className="text-xl font-bold text-gray-900">Propose Detail Site Work Completed</h2>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-700 to-blue-900 px-6 py-4 flex justify-between items-center text-white">
+                    <h2 className="text-xl font-bold flex items-center gap-2">
+                        <FileCheck className="w-6 h-6" /> Propose Detail Site Work Completed
+                    </h2>
+                    <button onClick={onClose} className="text-white/80 hover:text-white transition-colors">
                         <X className="w-6 h-6" />
                     </button>
                 </div>
 
-                <div className="p-6 overflow-y-auto space-y-8">
+                <div className="p-6 overflow-y-auto space-y-8 flex-1 bg-gray-50/50">
                     {/* Data Table */}
-                    <div className="overflow-x-auto border border-gray-300 rounded-lg">
+                    <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm bg-white">
                         <table className="w-full text-sm text-center text-nowrap">
-                            <thead className="text-gray-900 border-b border-gray-300">
+                            <thead className="text-gray-900 border-b border-gray-200">
                                 <tr>
-                                    <th className="px-4 py-3 font-semibold bg-[#C6E0B4] border-r border-gray-300">Project No.</th>
-                                    <th className="px-4 py-3 font-semibold bg-[#C00000] text-white border-r border-gray-300">SWO no.</th>
-                                    <th className="px-4 py-3 font-semibold bg-[#C00000] text-white border-r border-gray-300">Work Name/Scope</th>
-                                    <th className="px-4 py-3 font-semibold bg-[#C00000] text-white border-r border-gray-300">Supervisor Name</th>
-                                    <th className="px-4 py-3 font-semibold bg-[#FFFFFF] border-r border-gray-300">Work Activities (C1)<br />Progress %</th>
-                                    <th className="px-4 py-3 font-semibold bg-[#C00000] text-white border-r border-gray-300">Equipment<br />Usage (C2)</th>
-                                    <th className="px-4 py-3 font-semibold bg-[#C00000] text-white border-r border-gray-300">Worker Headcount<br />(C3)</th>
-                                    <th className="px-4 py-3 font-semibold bg-[#C00000] text-white border-r border-gray-300">Plan Finish<br />Date</th>
-                                    <th className="px-4 py-3 font-semibold bg-[#C00000] text-white border-r border-gray-300">Actual Finish<br />Date</th>
-                                    <th className="px-4 py-3 font-semibold bg-[#00FFFF]">Actual-Finish<br />Date</th>
+                                    <th className="px-4 py-3.5 font-semibold bg-[#E2EFD9] border-r border-gray-200 text-[#385623]">Project No.</th>
+                                    <th className="px-4 py-3.5 font-semibold bg-[#FCE4D6] border-r border-gray-200 text-[#C65911]">SWO no.</th>
+                                    <th className="px-4 py-3.5 font-semibold bg-[#FCE4D6] border-r border-gray-200 text-[#C65911]">Work Name/Scope</th>
+                                    <th className="px-4 py-3.5 font-semibold bg-[#FCE4D6] border-r border-gray-200 text-[#C65911]">Supervisor Name</th>
+                                    <th className="px-4 py-3.5 font-semibold bg-gray-50 border-r border-gray-200 text-gray-700">Work Activities<br /><span className="text-xs font-normal">(Progress %)</span></th>
+                                    <th className="px-4 py-3.5 font-semibold bg-gray-50 border-r border-gray-200 text-gray-700">Equipment<br /><span className="text-xs font-normal">(Usage)</span></th>
+                                    <th className="px-4 py-3.5 font-semibold bg-gray-50 border-r border-gray-200 text-gray-700">Worker<br /><span className="text-xs font-normal">(Headcount)</span></th>
+                                    <th className="px-4 py-3.5 font-semibold bg-[#DDEBF7] border-r border-gray-200 text-[#2F5496]">Plan Finish Date</th>
+                                    <th className="px-4 py-3.5 font-semibold bg-[#DDEBF7] border-r border-gray-200 text-[#2F5496]">Actual Finish Date</th>
+                                    <th className="px-4 py-3.5 font-semibold bg-[#FFF2CC] text-[#BF8F00]">Actual-Finish<br /><span className="text-xs font-normal">Status</span></th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr className="bg-white">
-                                    <td className="px-4 py-3 border-r border-gray-200 bg-[#C6E0B4]">{swoData.projectNo}</td>
-                                    <td className="px-4 py-3 border-r border-gray-200 bg-[#C00000] text-white">{swoData.swoNo}</td>
-                                    <td className="px-4 py-3 border-r border-gray-200 bg-[#C00000] text-white text-left">{swoData.scope}</td>
-                                    <td className="px-4 py-3 border-r border-gray-200 bg-[#C00000] text-white">{swoData.supervisor}</td>
-                                    <td className="px-4 py-3 border-r border-gray-200">{swoData.c1Prog}</td>
-                                    <td className="px-4 py-3 border-r border-gray-200 bg-[#C00000] text-white">{swoData.c2Usage}</td>
-                                    <td className="px-4 py-3 border-r border-gray-200 bg-[#C00000] text-white">{swoData.c3Workers}</td>
-                                    <td className="px-4 py-3 border-r border-gray-200 bg-[#C00000] text-white">{swoData.planFinish}</td>
-                                    <td className="px-4 py-3 border-r border-gray-200 bg-[#C00000] text-white">{swoData.actualFinish}</td>
-                                    <td className="px-4 py-3 bg-[#00FFFF] font-bold">{swoData.delayDays} Days</td>
+                                <tr className="bg-white hover:bg-gray-50 transition-colors">
+                                    <td className="px-4 py-4 border-r border-gray-200 font-medium text-[#385623]">{swoData.projectNo}</td>
+                                    <td className="px-4 py-4 border-r border-gray-200 font-semibold text-[#C65911]">{swoData.swoNo}</td>
+                                    <td className="px-4 py-4 border-r border-gray-200 text-left text-gray-800">{swoData.scope}</td>
+                                    <td className="px-4 py-4 border-r border-gray-200 text-gray-700">{swoData.supervisor}</td>
+                                    <td className="px-4 py-4 border-r border-gray-200 text-gray-700">{swoData.c1Prog}</td>
+                                    <td className="px-4 py-4 border-r border-gray-200 text-gray-700">{swoData.c2Usage}</td>
+                                    <td className="px-4 py-4 border-r border-gray-200 text-gray-700">{swoData.c3Workers}</td>
+                                    <td className="px-4 py-4 border-r border-gray-200 text-[#2F5496]">{swoData.planFinish}</td>
+                                    <td className="px-4 py-4 border-r border-gray-200 text-[#2F5496] font-medium">{actualFinishDate}</td>
+                                    <td className="px-4 py-4 font-bold text-center">
+                                        <span className={`px-2 py-1 rounded text-xs ${delayDays === '0' ? 'bg-[#E2EFD9] text-[#385623]' : 'bg-[#FCE4D6] text-[#C00000]'}`}>
+                                            {delayStatusText}
+                                        </span>
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
 
-                    {/* Inputs Area */}
-                    <div className="max-w-4xl space-y-6">
-                        {/* Note/Comment row */}
-                        <div className="flex gap-4 items-start">
-                            <div className="w-48 font-medium text-gray-700 pt-2 shrink-0">Note/Comment:</div>
-                            <div className="flex-1 space-y-3">
-                                {/* CM Note */}
-                                <div className="bg-[#FFF2CC] p-1 border border-[#F6C243]">
-                                    <textarea
-                                        rows={4}
-                                        className="w-full bg-transparent outline-none resize-none p-2 text-sm"
-                                        placeholder="CM Note..."
-                                        value={cmNote}
-                                        onChange={(e) => setCmNote(e.target.value)}
-                                        readOnly={user?.role !== 'CM' && swoData.status !== 'CM Review'}
-                                    />
-                                </div>
-                                {/* PM Note (Only shows if CM already submitted or User is PM/CD/GM/MD) */}
-                                {(swoData.status === 'PM Review' || swoData.status === 'Complete') && (
-                                    <div className="bg-[#E2F0D9] p-1 border border-[#A9D18E]">
-                                        <textarea
-                                            rows={3}
-                                            className="w-full bg-transparent outline-none resize-none p-2 text-sm"
-                                            placeholder="PM Note..."
-                                            value={pmNote}
-                                            onChange={(e) => setPmNote(e.target.value)}
-                                            readOnly={user?.role !== 'PM'}
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Quality of Work */}
-                        <div className="flex gap-4 items-center">
-                            <div className="w-48 font-medium text-gray-700 shrink-0">Quality of Work %</div>
-                            <div className="w-32 bg-[#C6E0B4] p-1 border border-[#A9D18E]">
-                                <input
-                                    type="number"
-                                    className="w-full bg-transparent outline-none p-1 text-center"
-                                    value={cmQuality}
-                                    onChange={(e) => setCmQuality(e.target.value)}
-                                    readOnly={user?.role !== 'CM' && swoData.status !== 'CM Review'}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        {/* Left Column: PM Inputs */}
+                        <div className="space-y-6 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                            <h3 className="text-lg font-bold text-gray-900 border-b pb-2">PM Evaluation Section</h3>
+                            
+                            {/* Note/Comment */}
+                            <div className="space-y-2">
+                                <label className="font-semibold text-gray-700 flex items-center gap-2">
+                                    <FileText className="w-4 h-4" /> PM Note/Comment:
+                                </label>
+                                <textarea
+                                    rows={4}
+                                    className={`w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow ${isPmReadonly ? 'bg-gray-50 text-gray-600 border-gray-200' : 'bg-white border-gray-300'}`}
+                                    placeholder={isPmReadonly ? "No comments from PM" : "Enter PM notes here..."}
+                                    value={pmNote}
+                                    onChange={(e) => setPmNote(e.target.value)}
+                                    readOnly={isPmReadonly}
                                 />
                             </div>
+
+                            <div className="grid grid-cols-2 gap-6">
+                                {/* Quality of Work */}
+                                <div className="space-y-2">
+                                    <label className="font-semibold text-gray-700">Quality of Work (%)</label>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            className={`w-full border rounded-lg p-2.5 pr-8 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${isPmReadonly ? 'bg-gray-50 text-gray-600 border-gray-200' : 'bg-white border-gray-300'}`}
+                                            placeholder="0-100"
+                                            value={pmQuality}
+                                            onChange={(e) => setPmQuality(e.target.value)}
+                                            readOnly={isPmReadonly}
+                                            min="0" max="100"
+                                        />
+                                        <span className="absolute right-3 top-2.5 text-gray-500 font-medium">%</span>
+                                    </div>
+                                </div>
+
+                                {/* Schedule on time */}
+                                <div className="space-y-2">
+                                    <label className="font-semibold text-gray-700">Schedule on time</label>
+                                    <div className="flex items-center gap-4 mt-2">
+                                        <label className={`flex items-center gap-2 ${isPmReadonly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+                                            <input
+                                                type="radio"
+                                                name="onTime"
+                                                className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                                                checked={pmOnTime === 'Yes'}
+                                                onChange={() => setPmOnTime('Yes')}
+                                                disabled={isPmReadonly}
+                                            />
+                                            <span className="text-sm font-medium">Yes</span>
+                                        </label>
+                                        <label className={`flex items-center gap-2 ${isPmReadonly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+                                            <input
+                                                type="radio"
+                                                name="onTime"
+                                                className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                                                checked={pmOnTime === 'No'}
+                                                onChange={() => setPmOnTime('No')}
+                                                disabled={isPmReadonly}
+                                            />
+                                            <span className="text-sm font-medium">No</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Delay Reason */}
+                            {pmOnTime === 'No' && (
+                                <div className="space-y-2 pt-2">
+                                    <label className="font-semibold text-gray-700 text-sm">Delay Reason</label>
+                                    <input
+                                        type="text"
+                                        className={`w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${isPmReadonly ? 'bg-gray-50 text-gray-600 border-gray-200' : 'bg-white border-gray-300'}`}
+                                        placeholder="Explain delay..."
+                                        value={pmDelay}
+                                        onChange={(e) => setPmDelay(e.target.value)}
+                                        readOnly={isPmReadonly}
+                                    />
+                                </div>
+                            )}
                         </div>
 
-                        {/* Schedule on time */}
-                        <div className="flex gap-4 items-center">
-                            <div className="w-48 font-medium text-gray-700 shrink-0">Schdule on time</div>
-                            <div className="flex items-center gap-6">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        className="w-4 h-4 accent-[#00FFFF]"
-                                        checked={cmOnTime === 'Yes'}
-                                        onChange={() => setCmOnTime('Yes')}
-                                        disabled={user?.role !== 'CM' && swoData.status !== 'CM Review'}
-                                    /> Yes
-                                </label>
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        className="w-4 h-4 accent-[#00FFFF]"
-                                        checked={cmOnTime === 'No'}
-                                        onChange={() => setCmOnTime('No')}
-                                        disabled={user?.role !== 'CM' && swoData.status !== 'CM Review'}
-                                    /> No
-                                </label>
-                                {cmOnTime === 'No' && (
-                                    <div className="flex items-center gap-2 ml-4">
-                                        <span className="text-gray-600">Dalay</span>
-                                        <div className="w-48 bg-[#00FFFF] border border-gray-300 p-1">
-                                            <input
-                                                type="text"
-                                                className="w-full bg-transparent outline-none px-2"
-                                                value={cmDelay}
-                                                onChange={(e) => setCmDelay(e.target.value)}
-                                                readOnly={user?.role !== 'CM' && swoData.status !== 'CM Review'}
-                                            />
-                                        </div>
+                        {/* Right Column: CD Review & Past Reports */}
+                        <div className="space-y-6 flex flex-col">
+                            {/* CD Note */}
+                            {(swoData.status === 'CD Review' || swoData.status === 'GM_MD Review' || swoData.status === 'Closed SWO' || user?.role === 'CD') && (
+                                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                                    <h3 className="text-lg font-bold text-gray-900 border-b pb-2 mb-4">CD Review Section</h3>
+                                    <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                                        <FileText className="w-4 h-4" /> CD Note:
+                                    </label>
+                                    <textarea
+                                        rows={3}
+                                        className={`w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow ${isCdReadonly ? 'bg-gray-50 text-gray-600 border-gray-200' : 'bg-white border-gray-300'}`}
+                                        placeholder={isCdReadonly ? "No comments from CD" : "Enter CD notes here..."}
+                                        value={cdNote}
+                                        onChange={(e) => setCdNote(e.target.value)}
+                                        readOnly={isCdReadonly}
+                                    />
+                                </div>
+                            )}
+
+                            {/* Past Reports List (For CD and above) */}
+                            {reports.length > 0 && (user?.role === 'CD' || user?.role === 'MD' || user?.role === 'GM' || user?.role === 'Admin') && (
+                                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex-1 flex flex-col">
+                                    <h3 className="text-lg font-bold text-gray-900 border-b pb-2 mb-4 flex items-center justify-between">
+                                        <span>Past Daily Reports</span>
+                                        <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded-full">{reports.length} Reports</span>
+                                    </h3>
+                                    <div className="overflow-y-auto max-h-[300px] pr-2 space-y-3">
+                                        {reports.map((r, i) => (
+                                            <div key={r.id} className="p-3 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center hover:bg-gray-100 transition-colors">
+                                                <div>
+                                                    <p className="font-semibold text-sm text-gray-800">Date: {r.date}</p>
+                                                    <p className="text-xs text-gray-500">Status: {r.status}</p>
+                                                </div>
+                                                <button className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1">
+                                                    <Eye className="w-4 h-4" /> View
+                                                </button>
+                                            </div>
+                                        ))}
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
 
                 {/* Actions Footer */}
-                <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end gap-4 rounded-b-xl">
-                    <button onClick={onClose} className="px-6 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
+                <div className="p-6 border-t border-gray-200 bg-white flex justify-end gap-3 rounded-b-2xl">
+                    <button onClick={onClose} className="px-5 py-2.5 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors">
                         Close
                     </button>
-                    {(user?.role === 'CM' || user?.role === 'Admin') && swoData.status === 'CM Review' && (
-                        <button onClick={() => onCmSubmit(cmNote, cmQuality, cmOnTime, cmDelay)} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-sm">
-                            Submit to PM
+                    
+                    {user?.role === 'PM' && swoData.status === 'PM Review' && (
+                        <button onClick={() => onPmSubmit(pmNote, pmQuality, pmOnTime, pmDelay)} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-sm transition-colors flex items-center gap-2">
+                            <Check className="w-4 h-4" /> Submit to CD
                         </button>
                     )}
-                    {(user?.role === 'PM' || user?.role === 'Admin') && swoData.status === 'PM Review' && (
-                        <button onClick={() => onPmSubmit(pmNote)} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold shadow-sm">
-                            Approve & Forward to CD, GM, MD
-                        </button>
+                    
+                    {user?.role === 'CD' && swoData.status === 'CD Review' && (
+                        <>
+                            <button onClick={() => onCdSubmit(cdNote, 'Rejected')} className="px-5 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 font-bold transition-colors">
+                                Reject Request
+                            </button>
+                            <button onClick={() => onCdSubmit(cdNote, 'Verified')} className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold shadow-sm transition-colors flex items-center gap-2">
+                                <ShieldAlert className="w-4 h-4" /> Verify (Inform MD)
+                            </button>
+                        </>
+                    )}
+
+                    {user?.role === 'GM' && swoData.status === 'GM_MD Review' && (
+                        <>
+                            <button onClick={() => onGmSubmit('Rejected')} className="px-5 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 font-bold transition-colors">
+                                Reject
+                            </button>
+                            <button onClick={() => onGmSubmit('Acknowledged')} className="px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold shadow-sm transition-colors flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4" /> Acknowledge
+                            </button>
+                        </>
+                    )}
+
+                    {user?.role === 'MD' && swoData.status === 'GM_MD Review' && (
+                        <>
+                            <button onClick={() => onMdSubmit('Rejected')} className="px-5 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 font-bold transition-colors">
+                                Reject
+                            </button>
+                            <button onClick={() => onMdSubmit('Locked')} className="px-6 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-bold shadow-sm transition-colors flex items-center gap-2">
+                                <Lock className="w-4 h-4" /> MD Lock
+                            </button>
+                        </>
                     )}
                 </div>
             </div>
@@ -183,15 +295,18 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onCmSubmit, onPmSubmit }
 export const SWOCloseWorkflow = () => {
     const { user } = useAuth();
     const [swos, setSwos] = useState<any[]>([]);
-    const [selectedSwoId, setSelectedSwoId] = useState<string | null>(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedSwoForModal, setSelectedSwoForModal] = useState<any | null>(null);
+    const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+    
+    // Supervisor Request Modal
+    const [isReqModalOpen, setIsReqModalOpen] = useState(false);
+    const [selectedSwoToRequest, setSelectedSwoToRequest] = useState<string | null>(null);
 
-    React.useEffect(() => {
+    useEffect(() => {
         const q = query(collection(db, "site_work_orders"));
         const unsub = onSnapshot(q, (snapshot) => {
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
 
-            // Filter SWOs by user assigned projects
             const visibleSwos = fetched.filter((swo: any) => {
                 if (!user) return false;
                 if (user.role === 'Admin' || user.role === 'MD' || user.role === 'GM' || user.role === 'CD') return true;
@@ -199,153 +314,244 @@ export const SWOCloseWorkflow = () => {
                 return user.assigned_projects?.includes(swo.project_id);
             });
 
+            // Sort so that the ones needing action are at top
+            visibleSwos.sort((a, b) => {
+                const statusOrder: Record<string, number> = {
+                    'PM Review': 1, 'CD Review': 2, 'GM_MD Review': 3, 'Active': 4, 'Closed SWO': 5
+                };
+                return (statusOrder[a.closure_status || 'Active'] || 99) - (statusOrder[b.closure_status || 'Active'] || 99);
+            });
+
             setSwos(visibleSwos);
-            if (!selectedSwoId && visibleSwos.length > 0) {
-                setSelectedSwoId(visibleSwos[0].id);
-            }
         });
         return unsub;
-    }, [selectedSwoId]);
+    }, [user]);
 
-    const activeSwo = swos.find(s => s.id === selectedSwoId);
-    const swoStatus = activeSwo?.closure_status || 'Active'; // Output: Active, CM Review, PM Review, Complete
-
-    // Format Data representing the parsed SWO for the Modal
-    const swoData = activeSwo ? {
-        id: activeSwo.id,
-        projectNo: activeSwo.project_id || 'Unknown',
-        swoNo: activeSwo.swo_no,
-        scope: activeSwo.work_name,
-        supervisor: activeSwo.supervisor_id,
-        c1Prog: '100%', // Derived from reports in real logic
-        c2Usage: `${(activeSwo.equipmentList || []).length} Eqm`,
-        c3Workers: `${(activeSwo.teamList || []).length} Teams`,
-        planFinish: '2026-02-20',
-        actualFinish: '2026-02-21',
-        delayDays: '1',
-        status: swoStatus,
-        cm_closure_note: activeSwo.cm_closure_note || '',
-        quality_score: activeSwo.quality_score || '',
-        on_time: activeSwo.on_time || null,
-        delay_reason: activeSwo.delay_reason || '',
-        pm_closure_note: activeSwo.pm_closure_note || ''
-    } : null;
-
-    const handleSupervisorRequest = async () => {
-        if (!activeSwo) return;
+    const handleSupervisorSubmitRequest = async () => {
+        if (!selectedSwoToRequest) return;
         try {
-            await updateDoc(doc(db, "site_work_orders", activeSwo.id), { closure_status: 'CM Review' });
+            await updateDoc(doc(db, "site_work_orders", selectedSwoToRequest), { closure_status: 'PM Review' });
+            setIsReqModalOpen(false);
+            setSelectedSwoToRequest(null);
+            alert('Request sent to PM successfully.');
         } catch (e) { console.error(e); }
     };
 
-    // Triggered inside the modal by CM
-    const handleCMSubmit = async (note: string, quality: string, onTime: string | null, delay: string) => {
-        if (!activeSwo) return;
+    const handlePmSubmit = async (note: string, quality: string, onTime: string | null, delay: string) => {
+        if (!selectedSwoForModal) return;
         try {
-            await updateDoc(doc(db, "site_work_orders", activeSwo.id), {
-                closure_status: 'PM Review',
-                cm_closure_note: note,
+            await updateDoc(doc(db, "site_work_orders", selectedSwoForModal.id), {
+                closure_status: 'CD Review',
+                pm_closure_note: note,
                 quality_score: quality,
                 on_time: onTime,
                 delay_reason: delay
             });
-            setIsModalOpen(false);
+            setIsDetailModalOpen(false);
         } catch (e) { console.error(e); }
     };
 
-    // Triggered inside the modal by PM
-    const handlePMSubmit = async (pmNote: string) => {
-        if (!activeSwo) return;
+    const handleCdSubmit = async (note: string, action: 'Verified' | 'Rejected') => {
+        if (!selectedSwoForModal) return;
         try {
-            await updateDoc(doc(db, "site_work_orders", activeSwo.id), {
-                closure_status: 'Complete',
-                pm_closure_note: pmNote
+            await updateDoc(doc(db, "site_work_orders", selectedSwoForModal.id), {
+                closure_status: action === 'Verified' ? 'GM_MD Review' : 'PM Review',
+                cd_closure_note: note
             });
-            setIsModalOpen(false);
+            setIsDetailModalOpen(false);
         } catch (e) { console.error(e); }
     };
+
+    const handleGmSubmit = async (action: 'Acknowledged' | 'Rejected') => {
+        if (!selectedSwoForModal) return;
+        try {
+            if (action === 'Rejected') {
+                await updateDoc(doc(db, "site_work_orders", selectedSwoForModal.id), {
+                    closure_status: 'CD Review',
+                    gm_status: 'Rejected'
+                });
+            } else {
+                await updateDoc(doc(db, "site_work_orders", selectedSwoForModal.id), {
+                    gm_status: 'Acknowledged'
+                });
+                alert('Acknowledged successfully.');
+            }
+            setIsDetailModalOpen(false);
+        } catch (e) { console.error(e); }
+    };
+
+    const handleMdSubmit = async (action: 'Locked' | 'Rejected') => {
+        if (!selectedSwoForModal) return;
+        try {
+            if (action === 'Rejected') {
+                await updateDoc(doc(db, "site_work_orders", selectedSwoForModal.id), {
+                    closure_status: 'CD Review',
+                    md_status: 'Rejected'
+                });
+            } else {
+                await updateDoc(doc(db, "site_work_orders", selectedSwoForModal.id), {
+                    closure_status: 'Closed SWO',
+                    md_status: 'Locked'
+                });
+            }
+            setIsDetailModalOpen(false);
+        } catch (e) { console.error(e); }
+    };
+
+    const openDetailModal = (swo: any) => {
+        // Mocking some relation data that would typically be joined
+        setSelectedSwoForModal({
+            id: swo.id,
+            projectNo: `PRJ-2026-J-73`, // Formatted as requested
+            swoNo: swo.swo_no,
+            scope: swo.work_name,
+            supervisor: swo.supervisor_id,
+            c1Prog: '100%',
+            c2Usage: `${(swo.equipmentList || []).length} Eqm`,
+            c3Workers: `${(swo.teamList || []).length} Teams`,
+            planFinish: swo.finish_date || '2026-02-28',
+            status: swo.closure_status || 'Active',
+            pm_closure_note: swo.pm_closure_note,
+            quality_score: swo.quality_score,
+            on_time: swo.on_time,
+            delay_reason: swo.delay_reason,
+            cd_closure_note: swo.cd_closure_note,
+            gm_status: swo.gm_status,
+            md_status: swo.md_status
+        });
+        setIsDetailModalOpen(true);
+    };
+
+    const activeSupervisorSwos = swos.filter(s => (s.closure_status || 'Active') === 'Active');
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-gray-50/50">
                 <div>
                     <h2 className="text-xl font-bold text-gray-900 flex items-center">
                         <FileCheck className="w-6 h-6 mr-2 text-blue-600" />
                         Part F: Close Site Work Order
                     </h2>
-                    <p className="text-gray-500 mt-1">Finalize SWO once all daily reports are approved.</p>
+                    <p className="text-gray-500 mt-1 text-sm">Finalize SWO and propose detail site work completed.</p>
                 </div>
-                {swos.length > 0 && (
-                    <select
-                        className="bg-gray-50 border border-gray-300 rounded p-2 text-sm outline-none"
-                        value={selectedSwoId || ''}
-                        onChange={(e) => setSelectedSwoId(e.target.value)}
+                {user?.role === 'Supervisor' && (
+                    <button 
+                        onClick={() => setIsReqModalOpen(true)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 font-medium transition-colors flex items-center gap-2"
                     >
-                        {swos.map(s => (
-                            <option key={s.id} value={s.id}>{s.swo_no} - {s.work_name}</option>
-                        ))}
-                    </select>
+                        <CheckCircle2 className="w-5 h-5" /> Request Closure
+                    </button>
                 )}
             </div>
 
-            {swos.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg border border-gray-200">
-                    No active Site Work Orders found.
+            <div className="p-0">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-50 text-gray-700 border-b border-gray-200">
+                        <tr>
+                            <th className="px-6 py-4 font-semibold">SWO No.</th>
+                            <th className="px-6 py-4 font-semibold">Work Name</th>
+                            <th className="px-6 py-4 font-semibold">Status</th>
+                            <th className="px-6 py-4 font-semibold text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {swos.length === 0 ? (
+                            <tr>
+                                <td colSpan={4} className="px-6 py-8 text-center text-gray-500">No Site Work Orders found.</td>
+                            </tr>
+                        ) : (
+                            swos.map(swo => {
+                                const status = swo.closure_status || 'Active';
+                                let statusBadge = 'bg-gray-100 text-gray-700';
+                                if (status === 'PM Review') statusBadge = 'bg-blue-100 text-blue-700';
+                                if (status === 'CD Review') statusBadge = 'bg-indigo-100 text-indigo-700';
+                                if (status === 'GM_MD Review') statusBadge = 'bg-purple-100 text-purple-700';
+                                if (status === 'Closed SWO') statusBadge = 'bg-green-100 text-green-700';
+
+                                return (
+                                    <tr key={swo.id} className="hover:bg-gray-50/80 transition-colors">
+                                        <td className="px-6 py-4 font-medium text-gray-900">{swo.swo_no}</td>
+                                        <td className="px-6 py-4 text-gray-600">{swo.work_name}</td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${statusBadge}`}>
+                                                {status}
+                                            </span>
+                                            {status === 'GM_MD Review' && swo.gm_status === 'Acknowledged' && (
+                                                <span className="ml-2 text-xs text-green-600 font-medium">GM Ack.</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button 
+                                                onClick={() => openDetailModal(swo)}
+                                                className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 font-medium text-xs transition-colors flex items-center gap-1 ml-auto"
+                                            >
+                                                <Eye className="w-4 h-4" /> View Details
+                                            </button>
+                                        </td>
+                                    </tr>
+                                );
+                            })
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Supervisor Request Modal */}
+            {isReqModalOpen && (
+                <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                            <h3 className="font-bold text-gray-900 text-lg">Select SWO to Close</h3>
+                            <button onClick={() => setIsReqModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-6 max-h-[60vh] overflow-y-auto">
+                            {activeSupervisorSwos.length === 0 ? (
+                                <p className="text-gray-500 text-center py-4">No active SWOs available to close.</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    {activeSupervisorSwos.map(swo => (
+                                        <label key={swo.id} className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${selectedSwoToRequest === swo.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                            <input 
+                                                type="radio" 
+                                                name="swo_request" 
+                                                className="mt-1 w-4 h-4 text-blue-600"
+                                                checked={selectedSwoToRequest === swo.id}
+                                                onChange={() => setSelectedSwoToRequest(swo.id)}
+                                            />
+                                            <div>
+                                                <p className="font-bold text-gray-900">{swo.swo_no}</p>
+                                                <p className="text-sm text-gray-600 mt-1">{swo.work_name}</p>
+                                            </div>
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+                            <button onClick={() => setIsReqModalOpen(false)} className="px-4 py-2 text-gray-700 font-medium hover:bg-gray-100 rounded-lg">Cancel</button>
+                            <button 
+                                onClick={handleSupervisorSubmitRequest}
+                                disabled={!selectedSwoToRequest}
+                                className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Confirm Request
+                            </button>
+                        </div>
+                    </div>
                 </div>
-            ) : (
-                <>
-                    <div className="flex justify-end mb-4">
-                        <span className={`px-3 py-1 rounded-full text-sm font-bold ${swoStatus === 'Complete' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                            }`}>
-                            Status: {swoStatus}
-                        </span>
-                    </div>
-
-                    <div className="flex gap-4 items-center p-4 bg-gray-50 rounded-lg border border-gray-100">
-
-                        {/* Supervisor Request */}
-                        <div className="flex-1 text-center">
-                            <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-2 ${swoStatus !== 'Active' ? 'bg-blue-100 text-blue-600' : 'bg-white border-2 border-gray-200 text-gray-400'
-                                }`}>
-                                <CheckCircle2 className="w-6 h-6" />
-                            </div>
-                            <p className="text-sm font-semibold">1. Supervisor Requests</p>
-                            {(user?.role === 'Supervisor' || user?.role === 'Admin') && swoStatus === 'Active' && (
-                                <button onClick={handleSupervisorRequest} className="mt-2 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">Request Closure</button>
-                            )}
-                        </div>
-
-                        <div className="w-16 h-1 bg-gray-200 rounded">
-                            <div className={`h-full rounded transition-all ${swoStatus !== 'Active' ? 'bg-blue-500 w-full' : 'w-0'}`} />
-                        </div>
-
-                        {/* CM/PM Approval */}
-                        <div className="flex-1 text-center">
-                            <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-2 ${swoStatus === 'Complete' ? 'bg-green-100 text-green-600' : 'bg-white border-2 border-gray-200 text-gray-400'
-                                }`}>
-                                <Lock className="w-6 h-6" />
-                            </div>
-                            <p className="text-sm font-semibold">2. CM/PM Final Approval</p>
-
-                            {/* View SWO Button to open the Modal. Visible to all once requested. */}
-                            {swoStatus !== 'Active' && (
-                                <button onClick={() => setIsModalOpen(true)} className="mt-2 px-4 py-1.5 bg-blue-50 text-blue-700 font-medium border border-blue-200 text-xs rounded hover:bg-blue-100">
-                                    View SWO
-                                </button>
-                            )}
-                        </div>
-
-                    </div>
-
-                    <ProposeDetailModal
-                        isOpen={isModalOpen}
-                        onClose={() => setIsModalOpen(false)}
-                        swoData={swoData}
-                        onCmSubmit={handleCMSubmit}
-                        onPmSubmit={handlePMSubmit}
-                    />
-                </>
             )}
+
+            <ProposeDetailModal
+                isOpen={isDetailModalOpen}
+                onClose={() => setIsDetailModalOpen(false)}
+                swoData={selectedSwoForModal}
+                onPmSubmit={handlePmSubmit}
+                onCdSubmit={handleCdSubmit}
+                onGmSubmit={handleGmSubmit}
+                onMdSubmit={handleMdSubmit}
+            />
         </div>
     );
 };
