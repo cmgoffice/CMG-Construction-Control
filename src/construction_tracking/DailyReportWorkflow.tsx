@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { CheckCircle, XCircle, Clock, Save, Send, AlertTriangle, MessageSquare, FileText } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthRBACRouter';
-import { db } from './firebase';
+import { db, storage } from './firebase';
 import { collection, addDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import SWOCreationForm from './SWOCreationForm';
 import { AlertModal, useAlert } from './AlertModal';
 
@@ -197,6 +198,31 @@ export const DailyReportManager = () => {
             />;
         }
 
+        // Non-Supervisor viewing an Assigned SWO: show view-only notice
+        if (selectedSwo.status === 'Assigned' && user?.role !== 'Supervisor') {
+            return (
+                <div className="max-w-4xl mx-auto space-y-6 pb-12">
+                    <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                        <div className="flex items-center gap-4">
+                            <button onClick={() => setSelectedSwo(null)} className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                            </button>
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-900">Site Work Order</h1>
+                                <p className="text-gray-500 mt-1">SWO: <span className="font-semibold text-gray-700">{selectedSwo.swo_no} - {selectedSwo.work_name}</span></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-8 text-center">
+                        <div className="text-5xl mb-4">⏳</div>
+                        <h2 className="text-xl font-bold text-blue-800 mb-2">รอ Supervisor รับงาน</h2>
+                        <p className="text-blue-600 text-sm">SWO นี้ยังอยู่ในสถานะ <span className="font-bold bg-blue-100 px-2 py-0.5 rounded-full">Assigned</span></p>
+                        <p className="text-blue-500 text-sm mt-1">ไม่สามารถดำเนินการใดได้จนกว่า Supervisor จะยืนยันรับงาน หรือขอแก้ไข</p>
+                    </div>
+                </div>
+            );
+        }
+
         if ((user?.role === 'Admin' || user?.role === 'PM') && selectedSwo.status === 'Request Change') {
             return <SWOCreationForm editSwo={selectedSwo} onCancelEdit={() => setSelectedSwo(null)} />;
         }
@@ -338,7 +364,7 @@ export const DailyReportManager = () => {
     );
 };
 
-// --- Part B -> C: Supervisor SWO Acceptance View ---
+// --- Supervisor SWO Acceptance View ---
 export const SwoAcceptanceView = ({ swo, allEquipments = [], allTeams = [], onBack, onActionComplete }: { swo: any, allEquipments?: any[], allTeams?: any[], onBack: () => void, onActionComplete: () => void }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [changeReason, setChangeReason] = useState("");
@@ -515,7 +541,7 @@ export const SwoAcceptanceView = ({ swo, allEquipments = [], allTeams = [], onBa
     );
 };
 
-// --- Part C: Supervisor's Daily Report Form ---
+// --- Supervisor's Daily Report Form ---
 export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = [], initialDate }: { onBack?: () => void, swo: any, allEquipments?: any[], allTeams?: any[], initialDate?: string }) => {
     const { user } = useAuth();
     const { showAlert, modalProps: formModalProps } = useAlert();
@@ -649,6 +675,7 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
     const [workers, setWorkers] = useState<any[]>(buildFreshWorkers());
     const [notes, setNotes] = useState('');
     const [files, setFiles] = useState<FileList | null>(null);
+    const [uploading, setUploading] = useState(false);
 
     // Load data into form once queries settle
     React.useEffect(() => {
@@ -688,33 +715,70 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
     };
 
     const handleSubmit = async () => {
-        const reportData = {
-            date: selectedDate,
-            swo_id: swo.id,
-            swo: swo.swo_no,
-            project_id: swo.project_id || '',
-            project_no: getProjectNo(swo.project_id),
-            supervisor: user?.name || swo.supervisor_id,
-            supervisor_name: user?.name || '',
-            work_name: swo.work_name || '',
-            status: 'Pending CM' as const,
-            cm_notes: '',
-            activities,
-            equipments,
-            workers,
-            notes
-        };
+        setUploading(true);
+        let attachmentUrls: { name: string; url: string; type: string }[] = existingReport?.attachments || [];
+
+        // Upload files to Firebase Storage
+        if (files && files.length > 0) {
+            try {
+                const uploads = Array.from(files).map(async (file) => {
+                    const path = `daily_reports/${swo.id}/${selectedDate}/${Date.now()}_${file.name}`;
+                    const storageRef = ref(storage, path);
+                    await uploadBytes(storageRef, file);
+                    const url = await getDownloadURL(storageRef);
+                    return { name: file.name, url, type: file.type };
+                });
+                const newUrls = await Promise.all(uploads);
+                attachmentUrls = [...attachmentUrls, ...newUrls];
+            } catch (uploadErr: any) {
+                console.error('[Storage] Upload error:', uploadErr?.code, uploadErr?.message);
+                setUploading(false);
+                const isPermission = uploadErr?.code === 'storage/unauthorized' || uploadErr?.code === 'storage/unknown';
+                showAlert('error',
+                    'อัปโหลดไฟล์ไม่สำเร็จ',
+                    isPermission
+                        ? 'Firebase Storage ไม่อนุญาต (Rules) — กรุณาแจ้ง Admin ตรวจสอบ Storage Rules\n\nCode: ' + uploadErr?.code
+                        : (uploadErr?.message || 'Unknown error')
+                );
+                return;
+            }
+        }
+
+        // Save report to Firestore
         try {
+            const reportData = {
+                date: selectedDate,
+                swo_id: swo.id,
+                swo: swo.swo_no,
+                project_id: swo.project_id || '',
+                project_no: getProjectNo(swo.project_id),
+                supervisor: user?.name || swo.supervisor_id,
+                supervisor_name: user?.name || '',
+                work_name: swo.work_name || '',
+                status: 'Pending CM' as const,
+                cm_notes: '',
+                activities,
+                equipments,
+                workers,
+                notes,
+                attachments: attachmentUrls
+            };
+
             if (existingReport?.status === 'Rejected') {
                 await updateDoc(doc(db, "daily_reports", existingReport.id), reportData);
-                showAlert('success', 'ส่งซ้ำเรียบร้อย', 'รายงานถูกส่งซ้ำและอยู่ระหว่างรอการอนุมัติ');
             } else {
                 await addDoc(collection(db, "daily_reports"), reportData);
-                showAlert('success', 'ส่งรายงานสำเร็จ', 'รายงานถูกส่งและอยู่ระหว่างรอการอนุมัติ');
             }
-            if (onBack) onBack();
+            setFiles(null);
+            setUploading(false);
+            showAlert('success',
+                existingReport?.status === 'Rejected' ? 'ส่งซ้ำเรียบร้อย' : 'ส่งรายงานสำเร็จ',
+                'รายงานถูกส่งและอยู่ระหว่างรอการอนุมัติ',
+                () => { if (onBack) onBack(); }
+            );
         } catch (e: any) {
-            console.error("Error submitting report: ", e);
+            console.error('[Firestore] Submit error:', e);
+            setUploading(false);
             showAlert('error', 'เกิดข้อผิดพลาด', e.message);
         }
     };
@@ -929,15 +993,32 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
                                     multiple
                                     accept="image/*,.pdf,.doc,.docx"
                                     onChange={(e) => setFiles(e.target.files)}
-                                    disabled={isReadOnly}
+                                    disabled={isReadOnly || uploading}
                                     className={`w-full md:w-1/2 text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold ${isReadOnly ? 'opacity-50 cursor-not-allowed file:bg-gray-200 file:text-gray-500' : 'file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer'} border border-gray-300 rounded-lg p-2 transition-colors`}
                                 />
                                 {files && files.length > 0 && (
                                     <span className="text-sm font-medium text-green-600 bg-green-50 px-3 py-1 rounded-full text-nowrap">
-                                        {files.length} file(s) attached
+                                        {files.length} file(s) ready to upload
                                     </span>
                                 )}
                             </div>
+                            {/* Existing attachments */}
+                            {(existingReport?.attachments || []).length > 0 && (
+                                <div className="mt-3 space-y-1">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Uploaded Attachments</p>
+                                    {(existingReport.attachments as { name: string; url: string; type: string }[]).map((att, i) => (
+                                        <a
+                                            key={i}
+                                            href={att.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800 hover:underline"
+                                        >
+                                            {att.type?.startsWith('image/') ? '🖼️' : '📎'} {att.name}
+                                        </a>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -945,12 +1026,15 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
 
             {!isReadOnly && (
                 <div className="flex flex-col-reverse sm:flex-row justify-end gap-4 pt-4">
-                    <button className="w-full sm:w-auto px-6 py-2 border border-gray-300 text-gray-700 bg-white rounded-xl hover:bg-gray-50 font-medium shadow-sm flex justify-center items-center">
+                    <button className="w-full sm:w-auto px-6 py-2 border border-gray-300 text-gray-700 bg-white rounded-xl hover:bg-gray-50 font-medium shadow-sm flex justify-center items-center" disabled={uploading}>
                         <Save className="w-4 h-4 mr-2" /> Save Draft
                     </button>
-                    <button className="w-full sm:w-auto px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium shadow-sm flex justify-center items-center" onClick={handleSubmit}>
-                        <Send className="w-4 h-4 mr-2" />
-                        {existingReport?.status === 'Rejected' ? 'Resubmit for Approval' : 'Submit for Approval'}
+                    <button className="w-full sm:w-auto px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium shadow-sm flex justify-center items-center disabled:opacity-60 disabled:cursor-not-allowed" onClick={handleSubmit} disabled={uploading}>
+                        {uploading ? (
+                            <><svg className="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>Uploading...</>
+                        ) : (
+                            <><Send className="w-4 h-4 mr-2" />{existingReport?.status === 'Rejected' ? 'Resubmit for Approval' : 'Submit for Approval'}</>
+                        )}
                     </button>
                 </div>
             )}
@@ -958,7 +1042,7 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
     );
 };
 
-// --- Part C: CM/PM Approval Dashboard ---
+// --- CM/PM Approval Dashboard ---
 export const ApprovalDashboard = () => {
     const { user } = useAuth();
     const { showAlert, showDelete, modalProps: approvalModalProps } = useAlert();
@@ -1269,6 +1353,31 @@ export const ApprovalDashboard = () => {
                                     <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
                                         <p className="text-xs font-semibold text-yellow-700 mb-1 uppercase tracking-wide">Supervisor Notes</p>
                                         <p className="text-sm text-yellow-900 whitespace-pre-wrap">{report.notes}</p>
+                                    </div>
+                                )}
+
+                                {/* Attachments */}
+                                {(report.attachments || []).length > 0 && (
+                                    <div className="rounded-xl border border-gray-200 overflow-hidden">
+                                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 font-semibold text-gray-800 text-sm flex items-center gap-2">
+                                            📎 Site Photos & Attachments
+                                            <span className="ml-1 bg-gray-200 text-gray-600 text-xs font-bold px-2 py-0.5 rounded-full">{report.attachments.length}</span>
+                                        </div>
+                                        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            {(report.attachments as { name: string; url: string; type: string }[]).map((att, i) => (
+                                                att.type?.startsWith('image/') ? (
+                                                    <a key={i} href={att.url} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden border border-gray-200 hover:border-indigo-400 transition-colors group">
+                                                        <img src={att.url} alt={att.name} className="w-full h-40 object-cover group-hover:opacity-90 transition-opacity" />
+                                                        <p className="px-3 py-1.5 text-xs text-gray-500 truncate bg-white">{att.name}</p>
+                                                    </a>
+                                                ) : (
+                                                    <a key={i} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 transition-colors">
+                                                        <span className="text-2xl">📄</span>
+                                                        <span className="text-sm text-indigo-700 font-medium truncate hover:underline">{att.name}</span>
+                                                    </a>
+                                                )
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
 

@@ -13,10 +13,10 @@ import { Profile } from './Profile';
 import ProjectDashboard from './ProjectDashboard';
 import SWOCreationForm from './SWOCreationForm';
 import { DailyReportManager, ApprovalDashboard } from './DailyReportWorkflow';
-import { SWOCloseWorkflow, ProjectCloseWorkflow } from './ClosureWorkflows';
+import { SWOCloseWorkflow } from './ClosureWorkflows';
 import ExecutiveDashboards from './ExecutiveDashboards';
 import { collection, onSnapshot, query } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, logActivity } from './firebase';
 
 // Wrapper: reads location.state to auto-edit a specific SWO
 const SWOCreationWrapper: React.FC = () => {
@@ -106,6 +106,26 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
   const didMountRef = useRef(false);
   const [pendingUserCount, setPendingUserCount] = useState(0);
 
+  // Log menu navigation — deduplicate with lastLoggedPath ref
+  const lastLoggedPath = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    if (location.pathname === lastLoggedPath.current) return;
+    lastLoggedPath.current = location.pathname;
+    const menuNameMap: Record<string, string> = {
+      '/dashboard': 'Projects',
+      '/swo-creation': 'Create SWO',
+      '/daily-report': 'Daily Report',
+      '/approvals': 'Approvals',
+      '/closures': 'Closures',
+      '/analytics': 'Analytics',
+      '/admin': 'Admin Panel',
+      '/profile': 'Profile',
+    };
+    const menuName = menuNameMap[location.pathname] || location.pathname;
+    logActivity({ uid: user.uid, name: user.name, role: user.role, action: 'Navigate', menu: menuName });
+  }, [location.pathname, user?.uid]); // eslint-disable-line
+
   useEffect(() => {
     const isAdminRole = user?.role === 'Admin' || (user?.role as string) === 'Administrator';
     if (!isAdminRole) return;
@@ -181,39 +201,46 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
           {(user?.role !== 'Supervisor') && (
             <Link to="/dashboard" className={navLinkClass('/dashboard')}>
               <Briefcase className="w-5 h-5 mr-3" />
-              Projects (Part A)
+              Projects
             </Link>
           )}
 
           {(user?.role === 'Admin' || user?.role === 'MD' || user?.role === 'PM' || user?.role === 'CM') && (
             <Link to="/swo-creation" className={navLinkClass('/swo-creation')}>
               <FileText className="w-5 h-5 mr-3" />
-              Create SWO (Part B)
+              Create SWO
             </Link>
           )}
 
           <Link to="/daily-report" className={navLinkClass('/daily-report')}>
             <FileText className="w-5 h-5 mr-3" />
-            Daily Report (Part C)
+            Daily Report
           </Link>
 
           {['Admin', 'MD', 'PM', 'CM'].includes(user?.role || '') && (
             <Link to="/approvals" className={navLinkClass('/approvals')}>
               <ShieldAlert className="w-5 h-5 mr-3" />
-              Approvals (Part C)
+              Approvals
             </Link>
           )}
 
           <Link to="/closures" className={navLinkClass('/closures')}>
             <ShieldAlert className="w-5 h-5 mr-3" />
-            Closures (Part F/G)
+            Closures
           </Link>
 
           {['Admin', 'MD', 'GM', 'CD', 'PM'].includes(user?.role || '') && (
             <Link to="/analytics" className={navLinkClass('/analytics')}>
               <BarChart3 className="w-5 h-5 mr-3" />
-              Analytics (Part D/H)
+              Analytics
             </Link>
+          )}
+
+          {(user?.role === 'Admin' || (user?.role as string) === 'Administrator') && (
+            <>
+              <div className="mx-4 my-4 border-t border-gray-200" />
+              <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Administration</p>
+            </>
           )}
 
           {(user?.role === 'Admin' || (user?.role as string) === 'Administrator') && (
@@ -395,11 +422,12 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
   );
 };
 
-// --- Login Guard: redirect authenticated users away from /login ---
+// --- Login Guard: redirect authenticated users to their default page ---
 const LoginGuard = () => {
   const { appUser } = useAuthContext();
   if (appUser && appUser.status === 'Approved') {
-    if (appUser.role === 'Supervisor') return <Navigate to="/swo-creation" replace />;
+    if (appUser.role === 'Supervisor') return <Navigate to="/daily-report" replace />;
+    if (appUser.role === 'Admin') return <Navigate to="/admin" replace />;
     return <Navigate to="/dashboard" replace />;
   }
   return <AuthForm />;
@@ -423,7 +451,7 @@ export const AuthRBACRouter = () => {
           } />
 
           <Route path="/swo-creation" element={
-            <ProtectedRoute allowedRoles={['Admin', 'MD', 'PM', 'CM', 'Supervisor']}>
+            <ProtectedRoute allowedRoles={['Admin', 'MD', 'PM', 'CM']}>
               <Layout>
                 <SWOCreationWrapper />
               </Layout>
@@ -451,8 +479,6 @@ export const AuthRBACRouter = () => {
               <Layout>
                 <div className="space-y-8">
                   <SWOCloseWorkflow />
-                  <hr className="border-gray-200" />
-                  <ProjectCloseWorkflow />
                 </div>
               </Layout>
             </ProtectedRoute>

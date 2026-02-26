@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from './firebase';
 
-export type NotificationType = 'assigned' | 'rejected' | 'pending_cm' | 'pending_pm' | 'change_request';
+export type NotificationType = 'assigned' | 'rejected' | 'pending_cm' | 'pending_pm' | 'change_request' | 'closure_review' | 'closure_rejected';
 
 export interface NotificationItem {
     id: string;
@@ -73,6 +73,23 @@ export const useNotifications = (user: {
 
     const items: NotificationItem[] = [];
 
+    // --- Supervisor: closure rejected by PM (closure_status=null, pm_reject_reason set) ---
+    if (role === 'Supervisor') {
+        const closureRejected = swos.filter(s =>
+            !s.closure_status &&
+            s.pm_reject_reason &&
+            swoIsMineSupervisor(s)
+        );
+        closureRejected.forEach(s => items.push({
+            id: `closure-rej-${s.id}`,
+            label: `SWO ${s.swo_no || s.id}: ${s.work_name || ''} — PM Rejected closure`,
+            path: '/closures',
+            type: 'closure_rejected',
+            step: 'คำขอปิด SWO ถูก Reject โดย PM',
+            targetId: s.id
+        }));
+    }
+
     // --- Supervisor: SWOs assigned but not yet accepted ---
     if (role === 'Supervisor') {
         const pending = swos.filter(s =>
@@ -131,6 +148,48 @@ export const useNotifications = (user: {
             path: '/swo-creation',
             type: 'change_request',
             step: 'ขอแก้ไข',
+            targetId: s.id
+        }));
+    }
+
+    // --- PM: SWOs waiting for closure review ---
+    if (role === 'PM') {
+        const closurePending = swos.filter(s =>
+            s.closure_status === 'PM Review' &&
+            swoInScope(s)
+        );
+        closurePending.forEach(s => items.push({
+            id: `closure-pm-${s.id}`,
+            label: `SWO ${s.swo_no || s.id}: ${s.work_name || ''} — รอ PM อนุมัติปิด SWO`,
+            path: '/closures',
+            type: 'closure_review',
+            step: 'รอ PM Review',
+            targetId: s.id
+        }));
+    }
+
+    // --- CD: SWOs waiting for closure review ---
+    if (role === 'CD') {
+        const closurePending = swos.filter(s => s.closure_status === 'CD Review');
+        closurePending.forEach(s => items.push({
+            id: `closure-cd-${s.id}`,
+            label: `SWO ${s.swo_no || s.id}: ${s.work_name || ''} — รอ CD Review`,
+            path: '/closures',
+            type: 'closure_review',
+            step: 'รอ CD Review',
+            targetId: s.id
+        }));
+    }
+
+    // --- MD: SWOs waiting for closure review ---
+    if (role === 'MD') {
+        const closurePending = swos.filter(s => s.closure_status === 'MD Review');
+        closurePending.forEach(s => items.push({
+            id: `closure-md-${s.id}`,
+            label: `SWO ${s.swo_no || s.id}: ${s.work_name || ''} — รอ MD อนุมัติปิด SWO`,
+            path: '/closures',
+            type: 'closure_review',
+            step: 'รอ MD Review',
             targetId: s.id
         }));
     }

@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Save, Send, HardHat, FileText, Wrench, Users, Download, Upload, FileSpreadsheet } from 'lucide-react';
+import { Plus, Trash2, Save, Send, HardHat, FileText, Wrench, Users, Download, Upload, FileSpreadsheet, X } from 'lucide-react';
 import { db } from './firebase';
-import { collection, onSnapshot, query, addDoc, doc, updateDoc, getDocs, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, doc, updateDoc, getDocs, where, deleteDoc } from 'firebase/firestore';
 import { useAuth } from './AuthRBACRouter';
 import { AlertModal, useAlert } from './AlertModal';
 
 export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: any, onCancelEdit?: () => void }) {
     const { user } = useAuth();
-    const { showAlert, showConfirm, modalProps } = useAlert();
+    const { showAlert, showConfirm, showDelete, modalProps } = useAlert();
     const [realProjects, setRealProjects] = useState<any[]>([]);
     const [realSupervisors, setRealSupervisors] = useState<any[]>([]);
     const [realEquipments, setRealEquipments] = useState<any[]>([]);
     const [realTeams, setRealTeams] = useState<any[]>([]);
     const [realSwos, setRealSwos] = useState<any[]>([]);
+    const [drafts, setDrafts] = useState<any[]>([]);
+    const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
 
     useEffect(() => {
         const qProjects = query(collection(db, "projects"));
@@ -40,7 +42,14 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
             setRealSwos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
 
-        return () => { unsubProjects(); unsubSupervisors(); unsubEqm(); unsubTeams(); unsubSwos(); };
+        const qDrafts = query(collection(db, "site_work_orders"), where("status", "==", "Draft"));
+        const unsubDrafts = onSnapshot(qDrafts, (snapshot) => {
+            const all = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            // Filter by user's accessible projects
+            setDrafts(all);
+        });
+
+        return () => { unsubProjects(); unsubSupervisors(); unsubEqm(); unsubTeams(); unsubSwos(); unsubDrafts(); };
     }, []);
 
     const activeProjects = realProjects.filter(p => {
@@ -136,6 +145,81 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
     const addTeam = () => setTeamList([...teamList, { id: Date.now(), team_id: '' }]);
     const removeTeam = (id: number) => setTeamList(teamList.filter(t => t.id !== id));
 
+    // Filter drafts by user's accessible projects
+    const visibleDrafts = drafts.filter(d => {
+        if (!user) return false;
+        if (user.role === 'Admin' || user.role === 'MD' || user.role === 'GM' || user.role === 'CD') return true;
+        return user.assigned_projects?.includes(d.project_id);
+    });
+
+    const loadDraft = (draft: any) => {
+        setEditingDraftId(draft.id);
+        setFormData({
+            project_id: draft.project_id || '',
+            swo_no: draft.swo_no || '',
+            work_name: draft.work_name || '',
+            supervisor_id: draft.supervisor_id || '',
+            additional_notes: draft.additional_notes || '',
+            start_date: draft.start_date || new Date().toISOString().split('T')[0],
+            finish_date: draft.finish_date || ''
+        });
+        if (draft.activities?.length) setActivities(draft.activities.map((a: any, i: number) => ({ ...a, id: a.id || Date.now() + i })));
+        if (draft.equipmentList?.length) setEquipmentList(draft.equipmentList.map((e: any, i: number) => ({ ...e, id: e.id || Date.now() + i })));
+        if (draft.teamList?.length) setTeamList(draft.teamList.map((t: any, i: number) => ({ ...t, id: t.id || Date.now() + i })));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const clearDraftEditing = () => {
+        setEditingDraftId(null);
+        setFormData(prev => ({ ...prev, work_name: '', supervisor_id: '', additional_notes: '' }));
+        setActivities([{ id: Date.now(), description: '', unit: '', qty_total: '', rate: '' }]);
+        setEquipmentList([{ id: Date.now(), equipment_id: '' }]);
+        setTeamList([{ id: Date.now(), team_id: '' }]);
+    };
+
+    const handleSaveDraft = async () => {
+        try {
+            const selectedSupervisor = realSupervisors.find(s => s.id === formData.supervisor_id);
+            const payload = {
+                project_id: formData.project_id,
+                swo_no: formData.swo_no,
+                work_name: formData.work_name,
+                supervisor_id: formData.supervisor_id,
+                supervisor_name: selectedSupervisor?.name || '',
+                activities,
+                equipmentList,
+                teamList,
+                additional_notes: formData.additional_notes,
+                start_date: formData.start_date,
+                finish_date: formData.finish_date,
+                status: 'Draft' as const,
+                updated_at: new Date().toISOString()
+            };
+            if (editingDraftId) {
+                await updateDoc(doc(db, "site_work_orders", editingDraftId), payload);
+                showAlert('success', 'บันทึก Draft แล้ว', `อัปเดต Draft ${formData.swo_no} เรียบร้อยแล้ว`);
+            } else {
+                await addDoc(collection(db, "site_work_orders"), { ...payload, created_at: new Date().toISOString() });
+                showAlert('success', 'บันทึก Draft แล้ว', `Draft ${formData.swo_no} ถูกบันทึกเรียบร้อยแล้ว`);
+                clearDraftEditing();
+            }
+        } catch (err: any) {
+            showAlert('error', 'เกิดข้อผิดพลาด', err.message);
+        }
+    };
+
+    const handleDeleteDraft = (draftId: string, swoNo: string) => {
+        showDelete(`ลบ Draft ${swoNo}?`, 'Draft นี้จะถูกลบถาวร ไม่สามารถย้อนกลับได้', async () => {
+            try {
+                await deleteDoc(doc(db, "site_work_orders", draftId));
+                if (editingDraftId === draftId) clearDraftEditing();
+                showAlert('success', 'ลบสำเร็จ', `Draft ${swoNo} ถูกลบแล้ว`);
+            } catch (err: any) {
+                showAlert('error', 'ลบไม่สำเร็จ', err.message);
+            }
+        });
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.supervisor_id) {
@@ -194,6 +278,11 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                 await updateDoc(doc(db, "site_work_orders", editSwo.id), payload);
                 showAlert('success', 'อัปเดตสำเร็จ', `SWO ${finalSwoNo} ได้รับการอัปเดตเรียบร้อยแล้ว`);
                 if (onCancelEdit) onCancelEdit();
+            } else if (editingDraftId) {
+                // Promote draft to real SWO
+                await updateDoc(doc(db, "site_work_orders", editingDraftId), { ...payload, swo_no: finalSwoNo });
+                showAlert('success', 'Assign SWO สำเร็จ', `SWO ${finalSwoNo} ถูกสร้างจาก Draft และ Assign เรียบร้อยแล้ว`);
+                clearDraftEditing();
             } else {
                 await addDoc(collection(db, "site_work_orders"), {
                     ...payload,
@@ -247,6 +336,50 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
     return (
         <div className="max-w-5xl mx-auto space-y-6 pb-12">
             <AlertModal {...modalProps} />
+
+            {/* Draft Cards */}
+            {!editSwo && visibleDrafts.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <h3 className="text-sm font-bold text-amber-800 mb-3 flex items-center gap-2">
+                        <Save className="w-4 h-4" />
+                        Saved Drafts ({visibleDrafts.length})
+                    </h3>
+                    <div className="flex flex-wrap gap-3">
+                        {visibleDrafts.map(draft => {
+                            const supName = realSupervisors.find(s => s.id === draft.supervisor_id)?.name || draft.supervisor_name || 'ยังไม่ได้เลือก';
+                            const projNo = realProjects.find(p => p.id === draft.project_id)?.no || '';
+                            const isActive = editingDraftId === draft.id;
+                            return (
+                                <div
+                                    key={draft.id}
+                                    className={`relative flex items-start gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all shadow-sm min-w-[200px] max-w-[260px] ${
+                                        isActive
+                                            ? 'border-amber-500 bg-amber-100'
+                                            : 'border-amber-200 bg-white hover:border-amber-400 hover:bg-amber-50'
+                                    }`}
+                                    onClick={() => loadDraft(draft)}
+                                >
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-bold text-gray-800 truncate">{draft.swo_no || 'ยังไม่มี SWO No.'}</p>
+                                        {projNo && <p className="text-xs text-blue-600 font-medium truncate">{projNo}</p>}
+                                        <p className="text-xs text-gray-500 truncate mt-0.5">👷 {supName}</p>
+                                        {draft.work_name && <p className="text-xs text-gray-400 truncate">{draft.work_name}</p>}
+                                        {isActive && <span className="inline-block mt-1 text-xs bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-bold">กำลังแก้ไข</span>}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteDraft(draft.id, draft.swo_no); }}
+                                        className="shrink-0 p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             {editSwo && (
                 <div className="flex items-center gap-4 bg-white p-6 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden">
                     <div className="absolute left-0 top-0 bottom-0 w-2 bg-orange-500"></div>
@@ -267,14 +400,25 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
 
             <div className={`flex justify-between items-center bg-white p-6 rounded-xl border border-gray-200 shadow-sm ${editSwo ? 'hidden' : ''}`}>
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Create Site Work Order (SWO)</h1>
-                    <p className="text-gray-500 mt-1">Fill in the details below or import data from Excel.</p>
+                    <h1 className="text-2xl font-bold text-gray-900">
+                        {editingDraftId ? 'Edit Draft SWO' : 'Create Site Work Order (SWO)'}
+                    </h1>
+                    <p className="text-gray-500 mt-1">
+                        {editingDraftId
+                            ? <span className="text-amber-600 font-medium">กำลังแก้ไข Draft — กด Save Draft เพื่อบันทึก หรือ Assign SWO เพื่อส่งงานทันที</span>
+                            : 'Fill in the details below or import data from Excel.'}
+                    </p>
                 </div>
                 <div className="flex flex-wrap gap-3 w-full md:w-auto">
-                    <button className="flex-1 md:flex-none justify-center px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 flex items-center font-medium shadow-sm transition-colors">
+                    <button
+                        type="button"
+                        onClick={handleSaveDraft}
+                        className="flex-1 md:flex-none justify-center px-4 py-2 border border-amber-400 text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 flex items-center font-medium shadow-sm transition-colors"
+                    >
                         <Save className="w-4 h-4 mr-2" /> Save Draft
                     </button>
                     <button
+                        type="button"
                         onClick={handleSubmit}
                         className="flex-1 md:flex-none justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center font-medium shadow-sm transition-colors"
                     >
@@ -284,7 +428,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
             </div>
 
             <form id="swo-form" onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                {/* SWO Header (Part B) */}
+                {/* SWO Header */}
                 <div className="p-6 border-b border-gray-100 bg-gray-50/30">
                     <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                         <FileText className="w-5 h-5 mr-2 text-blue-500" /> General Details
@@ -579,13 +723,31 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                 </div>
 
                 <div className="flex justify-end pt-6 border-t border-gray-200 bg-gray-50 p-6 rounded-b-xl -mx-6 -mb-6 mt-6">
-                    <div className="flex gap-3">
-                        <button type="button" onClick={() => { if (onCancelEdit) onCancelEdit() }} className="px-5 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors">
-                            {editSwo ? 'Cancel' : 'Save Draft'}
-                        </button>
-                        <button type="submit" form="swo-form" className="px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center shadow-sm">
-                            <Send className="w-4 h-4 mr-2" /> {editSwo ? 'Update SWO' : 'Assign SWO'}
-                        </button>
+                    <div className="flex gap-3 flex-wrap">
+                        {editSwo ? (
+                            <>
+                                <button type="button" onClick={() => { if (onCancelEdit) onCancelEdit(); }} className="px-5 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors">
+                                    Cancel
+                                </button>
+                                <button type="submit" form="swo-form" className="px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center shadow-sm">
+                                    <Send className="w-4 h-4 mr-2" /> Update SWO
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                {editingDraftId && (
+                                    <button type="button" onClick={clearDraftEditing} className="px-5 py-2.5 border border-gray-300 text-gray-500 font-medium rounded-lg hover:bg-gray-50 transition-colors text-sm">
+                                        ยกเลิกแก้ไข Draft
+                                    </button>
+                                )}
+                                <button type="button" onClick={handleSaveDraft} className="px-5 py-2.5 border border-amber-400 text-amber-700 bg-amber-50 font-medium rounded-lg hover:bg-amber-100 transition-colors flex items-center shadow-sm">
+                                    <Save className="w-4 h-4 mr-2" /> Save Draft
+                                </button>
+                                <button type="submit" form="swo-form" className="px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center shadow-sm">
+                                    <Send className="w-4 h-4 mr-2" /> Assign SWO
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             </form>

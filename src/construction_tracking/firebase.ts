@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, addDoc, collection as fsCollection } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
     apiKey: "AIzaSyAPtyxReFV0QrSoMcoIih2yMs11BbaLc1w",
@@ -15,3 +16,23 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+export const storage = getStorage(app);
+
+export const logActivity = async (params: {
+    uid: string;
+    name: string;
+    role: string;
+    action: string;
+    menu?: string;
+    detail?: string;
+}) => {
+    try {
+        await addDoc(fsCollection(db, "activity_logs"), {
+            ...params,
+            timestamp: new Date().toISOString(),
+            date: new Date().toISOString().split('T')[0],
+        });
+    } catch {
+        // Silent fail — logging should never break the app
+    }
+};

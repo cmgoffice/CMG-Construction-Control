@@ -7,7 +7,7 @@ import { collection, onSnapshot, query } from 'firebase/firestore';
 
 // --- Mock Data ---
 
-// Progress Data (Part D)
+// Progress Data
 const progressData = [
     { name: 'Mon', plan: 15, actual: 12 },
     { name: 'Tue', plan: 30, actual: 28 },
@@ -18,7 +18,7 @@ const progressData = [
     { name: 'Sun', plan: 100, actual: 100 },
 ];
 
-// Supervisor Success Rate (Part H)
+// Supervisor Success Rate
 const supervisorData = [
     { name: 'Success (On-time/Budget)', value: 85 },
     { name: 'Delayed', value: 10 },
@@ -26,7 +26,7 @@ const supervisorData = [
 ];
 const COLORS = ['#22c55e', '#eab308', '#ef4444'];
 
-// PM/CM SLA Tracking (Part H)
+// PM/CM SLA Tracking
 const slaData = [
     { name: 'Frank (PM)', avg_approval_hours: 4.5 },
     { name: 'Grace (PM)', avg_approval_hours: 12.0 },
@@ -76,12 +76,12 @@ export default function ExecutiveDashboards() {
                 <p className="text-gray-500">Track project progress and executive performance metrics.</p>
             </div>
 
-            {/* Part D: Project Progress Dashboard (Visible to PMs and Execs) */}
+            {/* Project Progress Dashboard */}
             <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-lg font-bold text-gray-800 flex items-center">
                         <TrendingUp className="w-5 h-5 mr-2 text-blue-600" />
-                        Part D: Project Cumulative Progress (%)
+                        Project Cumulative Progress (%)
                     </h2>
                     <div className="flex gap-3">
                         <select
@@ -140,13 +140,13 @@ export default function ExecutiveDashboards() {
                 </div>
             </section>
 
-            {/* Part H: Executive Performance Evaluation (STRICTLY Execs Only) */}
+            {/* Executive Performance Evaluation (STRICTLY Execs Only) */}
             {isExecutive ? (
                 <section className="space-y-6">
                     <div>
                         <h2 className="text-xl font-bold text-gray-900 flex items-center mb-2">
                             <ShieldCheck className="w-6 h-6 mr-2 text-indigo-600" />
-                            Part H: Executive Performance Evaluation
+                            Executive Performance Evaluation
                         </h2>
                         <p className="text-sm text-gray-500">Strictly visible to CD, GM, and MD.</p>
                     </div>
@@ -213,7 +213,7 @@ export default function ExecutiveDashboards() {
                 <div className="bg-gray-50 p-8 rounded-xl border border-gray-200 text-center shadow-inner">
                     <Activity className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                     <h3 className="text-lg font-bold text-gray-600">Executive Insight Restricted</h3>
-                    <p className="text-gray-500 max-w-sm mx-auto mt-2">You do not have the required clearance (MD, GM, CD) to view Part H performance evaluations.</p>
+                    <p className="text-gray-500 max-w-sm mx-auto mt-2">You do not have the required clearance (MD, GM, CD) to view Executive Performance Evaluations.</p>
                 </div>
             )}
 

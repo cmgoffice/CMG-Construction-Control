@@ -10,7 +10,7 @@ import {
     signInWithPopup
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, getDocs, collection, query, limit } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { auth, db, logActivity } from './firebase';
 
 export type Role = 'Admin' | 'MD' | 'GM' | 'CD' | 'PCM' | 'HRM' | 'PM' | 'CM' | 'Supervisor' | 'Staff' | 'HR' | 'Procurement' | 'Site Admin';
 export type Status = 'Pending' | 'Approved' | 'Rejected';
@@ -133,6 +133,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
 
             setAppUser({ uid: user.uid, ...userData });
+            await logActivity({ uid: user.uid, name: `${userData.firstName} ${userData.lastName}`, role: userData.role, action: 'Login', detail: 'Email/Password login' });
         } else {
             // Corrupted record
             await signOut(auth);
@@ -162,6 +163,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
 
             setAppUser({ uid: user.uid, ...userData });
+            await logActivity({ uid: user.uid, name: `${userData.firstName} ${userData.lastName}`, role: userData.role, action: 'Login', detail: 'Google login' });
         } else {
             // First time Google login — check if first user ever
             const usersRef = collection(db, 'users');
@@ -199,10 +201,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
 
             setAppUser({ uid: user.uid, ...newUserProfile });
+            await logActivity({ uid: user.uid, name: `${newUserProfile.firstName} ${newUserProfile.lastName}`, role: newUserProfile.role, action: 'Login', detail: 'Google login (new user)' });
         }
     };
 
     const logout = async () => {
+        if (appUser) {
+            await logActivity({ uid: appUser.uid, name: `${appUser.firstName} ${appUser.lastName}`, role: appUser.role, action: 'Logout' });
+        }
         await signOut(auth);
         setAppUser(null);
     };

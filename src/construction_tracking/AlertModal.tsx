@@ -117,8 +117,8 @@ export const useAlert = () => {
         onConfirm?: () => void; confirmLabel?: string; cancelLabel?: string;
     }>({ open: false, type: 'info', title: '' });
 
-    const showAlert = (type: AlertType, title: string, message?: string) => {
-        setState({ open: true, type, title, message });
+    const showAlert = (type: AlertType, title: string, message?: string, onAfterClose?: () => void) => {
+        setState({ open: true, type, title, message, onConfirm: onAfterClose });
     };
 
     const showConfirm = (title: string, message: string, onConfirm: () => void, confirmLabel?: string, cancelLabel?: string) => {
@@ -129,7 +129,12 @@ export const useAlert = () => {
         setState({ open: true, type: 'delete', title, message, onConfirm, confirmLabel: 'ลบ', cancelLabel: 'ยกเลิก' });
     };
 
-    const closeAlert = () => setState(s => ({ ...s, open: false }));
+    const closeAlert = () => {
+        const cb = state.onConfirm;
+        setState(s => ({ ...s, open: false, onConfirm: undefined }));
+        // For non-confirm alerts, onConfirm is used as an after-close callback
+        if (state.type !== 'confirm' && state.type !== 'delete' && cb) cb();
+    };
 
     const modalProps = { ...state, onClose: closeAlert };
 
