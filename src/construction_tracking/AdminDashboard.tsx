@@ -126,7 +126,7 @@ export const AdminDashboard = () => {
                     role: appUser.role,
                     action: 'Approve',
                     menu: 'Admin Panel',
-                    detail: `Approved user: ${userToApprove.firstName} ${userToApprove.lastName} (${userToApprove.email})`
+                    detail: `Approve User: ${userToApprove.email} (${userToApprove.firstName} ${userToApprove.lastName})`
                 });
             }
 
@@ -161,7 +161,7 @@ export const AdminDashboard = () => {
                         role: appUser.role,
                         action: 'Reject',
                         menu: 'Admin Panel',
-                        detail: `Rejected user: ${userToReject.firstName} ${userToReject.lastName} (${userToReject.email})`
+                        detail: `Reject User: ${userToReject.email} (${userToReject.firstName} ${userToReject.lastName})`
                     });
                 }
 
@@ -993,8 +993,8 @@ export const AdminDashboard = () => {
                                                     {log.action === 'Navigate' ? 'เข้าเมนู' : log.action}
                                                 </span>
                                             </td>
-                                            <td className="px-3 py-1.5 text-xs text-gray-600">
-                                                {log.menu || log.detail || '-'}
+                                            <td className="px-3 py-1.5 text-xs text-gray-600 max-w-md whitespace-normal" title={log.detail || log.menu || ''}>
+                                                {log.detail || log.menu || '-'}
                                             </td>
                                         </tr>
                                     ))

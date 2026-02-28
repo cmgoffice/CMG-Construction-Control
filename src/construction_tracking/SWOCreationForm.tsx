@@ -197,9 +197,29 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
             };
             if (editingDraftId) {
                 await updateDoc(doc(db, "site_work_orders", editingDraftId), payload);
+                if (user) {
+                    await logActivity({
+                        uid: user.uid,
+                        name: user.name,
+                        role: user.role,
+                        action: 'Draft',
+                        menu: 'Create SWO',
+                        detail: `Draft SWO No. ${formData.swo_no || '-'} (Updated) - ${formData.work_name}`
+                    });
+                }
                 showAlert('success', 'บันทึก Draft แล้ว', `อัปเดต Draft ${formData.swo_no} เรียบร้อยแล้ว`);
             } else {
                 await addDoc(collection(db, "site_work_orders"), { ...payload, created_at: new Date().toISOString() });
+                if (user) {
+                    await logActivity({
+                        uid: user.uid,
+                        name: user.name,
+                        role: user.role,
+                        action: 'Draft',
+                        menu: 'Create SWO',
+                        detail: `Draft SWO No. ${formData.swo_no || '-'} (Saved) - ${formData.work_name}`
+                    });
+                }
                 showAlert('success', 'บันทึก Draft แล้ว', `Draft ${formData.swo_no} ถูกบันทึกเรียบร้อยแล้ว`);
                 clearDraftEditing();
             }
@@ -281,6 +301,16 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
             } else if (editingDraftId) {
                 // Promote draft to real SWO
                 await updateDoc(doc(db, "site_work_orders", editingDraftId), { ...payload, swo_no: finalSwoNo });
+                if (user) {
+                    await logActivity({
+                        uid: user.uid,
+                        name: user.name,
+                        role: user.role,
+                        action: 'Create',
+                        menu: 'Create SWO',
+                        detail: `Create SWO No. ${finalSwoNo} (from draft, Assigned) - ${formData.work_name}`
+                    });
+                }
                 showAlert('success', 'Assign SWO สำเร็จ', `SWO ${finalSwoNo} ถูกสร้างจาก Draft และ Assign เรียบร้อยแล้ว`);
                 clearDraftEditing();
             } else {
@@ -297,7 +327,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                         role: user.role,
                         action: 'Create',
                         menu: 'Create SWO',
-                        detail: `Created SWO: ${finalSwoNo} - ${formData.work_name}`
+                        detail: `Create SWO No. ${finalSwoNo} - ${formData.work_name}`
                     });
                 }
                 

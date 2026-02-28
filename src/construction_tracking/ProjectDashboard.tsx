@@ -147,7 +147,7 @@ export default function ProjectDashboard() {
                     role: user?.role || '',
                     action: 'Update',
                     menu: 'Projects',
-                    detail: `Updated project: ${formData.name}`
+                    detail: `Update Project No. ${formData.no || '-'} - ${formData.name}`
                 });
                 showAlert('success', 'อัปเดตสำเร็จ', 'Project ได้รับการอัปเดตเรียบร้อยแล้ว');
             } else {
@@ -163,7 +163,7 @@ export default function ProjectDashboard() {
                     role: user?.role || '',
                     action: 'Create',
                     menu: 'Projects',
-                    detail: `Created project: ${formData.name}`
+                    detail: `Create Project No. ${formData.no || '-'} - ${formData.name}`
                 });
                 showAlert('success', 'สร้างสำเร็จ', 'Project ถูกสร้างเรียบร้อยแล้ว');
             }

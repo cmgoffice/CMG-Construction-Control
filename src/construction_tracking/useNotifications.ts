@@ -11,6 +11,11 @@ export interface NotificationItem {
     type: NotificationType;
     step: string;
     targetId: string;  // SWO doc id for daily-report page, Report doc id for approvals page
+    /** For closure_rejected: SWO number, work name, reject by role, reason */
+    swoNo?: string;
+    workName?: string;
+    rejectByRole?: string;
+    rejectReason?: string;
 }
 
 export interface NotificationState {
@@ -43,7 +48,7 @@ export const useNotifications = (user: {
         });
 
         return () => { unsub1(); unsub2(); };
-    }, [user?.role, user?.uid]);
+    }, [user?.role, user?.uid, JSON.stringify(user?.assigned_projects ?? [])]);
 
     if (!user?.role) return { count: 0, items: [] };
 
@@ -80,14 +85,22 @@ export const useNotifications = (user: {
             s.pm_reject_reason &&
             swoIsMineSupervisor(s)
         );
-        closureRejected.forEach(s => items.push({
-            id: `closure-rej-${s.id}`,
-            label: `SWO ${s.swo_no || s.id}: ${s.work_name || ''} — PM Rejected closure`,
-            path: '/closures',
-            type: 'closure_rejected',
-            step: 'คำขอปิด SWO ถูก Reject โดย PM',
-            targetId: s.id
-        }));
+        closureRejected.forEach(s => {
+            const rejectByRole = s.pm_reject_reason ? 'PM' : (s.cd_reject_reason ? 'CD' : 'MD');
+            const rejectReason = s.pm_reject_reason || s.cd_reject_reason || s.md_reject_reason || '';
+            items.push({
+                id: `closure-rej-${s.id}`,
+                label: `SWO ${s.swo_no || s.id}: ${s.work_name || ''} — ${rejectByRole} Rejected closure`,
+                path: '/closures',
+                type: 'closure_rejected',
+                step: `คำขอปิด SWO ถูก Reject โดย ${rejectByRole}`,
+                targetId: s.id,
+                swoNo: s.swo_no || s.id,
+                workName: s.work_name || '-',
+                rejectByRole,
+                rejectReason,
+            });
+        });
     }
 
     // --- Supervisor: SWOs assigned but not yet accepted ---

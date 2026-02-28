@@ -1,7 +1,7 @@
 import React, { useState, ReactNode, useRef, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { ShieldAlert, LogOut, Menu, UserCircle, Briefcase, FileText, BarChart3, Shield, User, Bell } from 'lucide-react';
-import { useNotifications } from './useNotifications';
+import { useNotifications, NotificationItem } from './useNotifications';
 
 // Real Auth imports
 import { AuthProvider as RealAuthProvider, useAuthContext, Role as RealRole } from './AuthContext';
@@ -15,7 +15,7 @@ import SWOCreationForm from './SWOCreationForm';
 import { DailyReportManager, ApprovalDashboard } from './DailyReportWorkflow';
 import { SWOCloseWorkflow } from './ClosureWorkflows';
 import ExecutiveDashboards from './ExecutiveDashboards';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc } from 'firebase/firestore';
 import { db, logActivity } from './firebase';
 
 // Wrapper: reads location.state to auto-edit a specific SWO
@@ -90,6 +90,72 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
   }
 
   return <>{children}</>;
+};
+
+// --- Closure Rejected notification card (Supervisor): shows SWO No, Work Name, Reject Role, Reason + 2 buttons ---
+const ClosureRejectedNotificationCard: React.FC<{
+  item: NotificationItem;
+  onResubmit: () => void | Promise<void>;
+  onCancel: () => void | Promise<void>;
+  onGoToPage: () => void;
+}> = ({ item, onResubmit, onCancel, onGoToPage }) => {
+  const [loading, setLoading] = useState(false);
+  const handleResubmit = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLoading(true);
+    try {
+      await onResubmit();
+    } finally {
+      setLoading(false);
+    }
+  };
+  const handleCancel = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLoading(true);
+    try {
+      await onCancel();
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <div className="px-4 py-3 bg-red-50/80 border-l-4 border-red-400 rounded-r-lg" onClick={e => e.stopPropagation()}>
+      <div className="flex items-start gap-2 mb-2">
+        <span className="mt-1 w-2.5 h-2.5 rounded-full shrink-0 animate-pulse bg-red-500" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-red-800 uppercase tracking-wide mb-1.5">คำขอปิด SWO ถูก Reject</p>
+          <dl className="text-sm space-y-0.5">
+            <div><span className="text-gray-600">SWO No.:</span> <span className="font-medium text-gray-900 ml-1">{item.swoNo ?? '-'}</span></div>
+            <div><span className="text-gray-600">Work Name:</span> <span className="font-medium text-gray-900 ml-1">{item.workName ?? '-'}</span></div>
+            <div><span className="text-gray-600">Reject จาก Role:</span> <span className="font-medium text-red-700 ml-1">{item.rejectByRole ?? '-'}</span></div>
+            <div><span className="text-gray-600">เหตุผล:</span> <span className="text-red-700 ml-1">{item.rejectReason ?? '-'}</span></div>
+          </dl>
+        </div>
+      </div>
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={handleCancel}
+          disabled={loading}
+          className="flex-1 px-3 py-1.5 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 text-xs font-medium transition-colors disabled:opacity-50"
+        >
+          ยกเลิก
+        </button>
+        <button
+          onClick={handleResubmit}
+          disabled={loading}
+          className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-medium transition-colors disabled:opacity-50"
+        >
+          ส่งคำขอใหม่
+        </button>
+      </div>
+      <button
+        onClick={onGoToPage}
+        className="w-full mt-2 text-center text-xs text-blue-600 hover:text-blue-800 font-medium"
+      >
+        ไปหน้าปิด SWO →
+      </button>
+    </div>
+  );
 };
 
 // --- Layout Component (Sidebar + Header) ---
@@ -285,30 +351,60 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
                       </div>
                     ) : (
                       notifItems.map(item => (
-                        <button
-                          key={item.id}
-                          onClick={() => { navigate(item.path, { state: { targetId: item.targetId, notifType: item.type } }); setBellOpen(false); }}
-                          className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors group"
-                        >
-                          <div className="flex items-start gap-3">
-                            <span className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 animate-pulse ${
-                              item.type === 'rejected' ? 'bg-red-500' :
-                              item.type === 'pending_cm' ? 'bg-yellow-500' :
-                              item.type === 'pending_pm' ? 'bg-blue-500' :
-                              item.type === 'assigned' ? 'bg-green-500' : 'bg-orange-500'
-                            }`}></span>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-gray-800 font-medium leading-snug group-hover:text-blue-700">{item.label}</p>
-                              <span className={`inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                item.type === 'rejected' ? 'bg-red-100 text-red-600' :
-                                item.type === 'pending_cm' ? 'bg-yellow-100 text-yellow-700' :
-                                item.type === 'pending_pm' ? 'bg-blue-100 text-blue-700' :
-                                item.type === 'assigned' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                              }`}>{item.step}</span>
+                        item.type === 'closure_rejected' ? (
+                          <ClosureRejectedNotificationCard
+                            key={item.id}
+                            item={item}
+                            onResubmit={async () => {
+                              try {
+                                await updateDoc(doc(db, 'site_work_orders', item.targetId), {
+                                  closure_status: 'PM Review',
+                                  pm_reject_reason: null,
+                                  cd_reject_reason: null,
+                                  md_reject_reason: null,
+                                });
+                                setBellOpen(false);
+                              } catch (e) { console.error(e); }
+                            }}
+                            onCancel={async () => {
+                              try {
+                                await updateDoc(doc(db, 'site_work_orders', item.targetId), {
+                                  closure_status: null,
+                                  pm_reject_reason: null,
+                                  cd_reject_reason: null,
+                                  md_reject_reason: null,
+                                });
+                                setBellOpen(false);
+                              } catch (e) { console.error(e); }
+                            }}
+                            onGoToPage={() => { navigate(item.path, { state: { targetId: item.targetId, notifType: item.type } }); setBellOpen(false); }}
+                          />
+                        ) : (
+                          <button
+                            key={item.id}
+                            onClick={() => { navigate(item.path, { state: { targetId: item.targetId, notifType: item.type } }); setBellOpen(false); }}
+                            className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors group"
+                          >
+                            <div className="flex items-start gap-3">
+                              <span className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 animate-pulse ${
+                                item.type === 'rejected' ? 'bg-red-500' :
+                                item.type === 'pending_cm' ? 'bg-yellow-500' :
+                                item.type === 'pending_pm' ? 'bg-blue-500' :
+                                item.type === 'assigned' ? 'bg-green-500' : 'bg-orange-500'
+                              }`}></span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-gray-800 font-medium leading-snug group-hover:text-blue-700">{item.label}</p>
+                                <span className={`inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  item.type === 'rejected' ? 'bg-red-100 text-red-600' :
+                                  item.type === 'pending_cm' ? 'bg-yellow-100 text-yellow-700' :
+                                  item.type === 'pending_pm' ? 'bg-blue-100 text-blue-700' :
+                                  item.type === 'assigned' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                                }`}>{item.step}</span>
+                              </div>
+                              <span className="text-gray-300 group-hover:text-blue-400 text-xs mt-1">→</span>
                             </div>
-                            <span className="text-gray-300 group-hover:text-blue-400 text-xs mt-1">→</span>
-                          </div>
-                        </button>
+                          </button>
+                        )
                       ))
                     )}
                   </div>

@@ -628,8 +628,10 @@ export const SWOCloseWorkflow = () => {
 
             const visible = fetched.filter((swo: any) => {
                 if (!user) return false;
-                // PM sees only SWOs that have been submitted for closure (not Active/null)
+                // PM sees only SWOs under their own projects that have been submitted for closure
                 if (user.role === 'PM') {
+                    const inMyProjects = user.assigned_projects?.includes(swo.project_id);
+                    if (!inMyProjects) return false;
                     const cs = swo.closure_status;
                     return cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
                 }
@@ -638,16 +640,16 @@ export const SWOCloseWorkflow = () => {
                     return cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
                 }
                 if (user.role === 'Supervisor') {
-                    // Include SWOs assigned to this supervisor (for closure workflow or rejected items)
+                    // Include SWOs assigned to this supervisor: in closure flow, rejected, or active/cancelled (can request closure)
                     const isAssigned = supervisorDocId ? swo.supervisor_id === supervisorDocId : swo.supervisor_name === user.name;
                     if (!isAssigned) return false;
                     
-                    // Show closure workflow items OR rejected items
                     const cs = swo.closure_status;
                     const isInClosureFlow = cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
                     const isRejected = !cs && swo.pm_reject_reason;
+                    const isActiveOrCancelled = !cs; // no closure status = can request closure (including after cancel)
                     
-                    return isInClosureFlow || isRejected;
+                    return isInClosureFlow || isRejected || isActiveOrCancelled;
                 }
                 return user.assigned_projects?.includes(swo.project_id);
             });
@@ -694,7 +696,7 @@ export const SWOCloseWorkflow = () => {
                     role: user.role,
                     action: 'Approve',
                     menu: 'Closures',
-                    detail: `PM approved SWO closure: ${selectedSwoForModal.swoNo} (Quality: ${quality})`
+                    detail: `Approve SWO No. ${selectedSwoForModal.swoNo} (Quality: ${quality})`
                 });
             }
             
@@ -710,6 +712,16 @@ export const SWOCloseWorkflow = () => {
                 closure_status: null,
                 pm_reject_reason: reason,
             });
+            if (user) {
+                await logActivity({
+                    uid: user.uid,
+                    name: user.name,
+                    role: user.role,
+                    action: 'Reject',
+                    menu: 'Closures',
+                    detail: `Reject SWO No. ${selectedSwoForModal.swoNo} (Reason: ${reason})`
+                });
+            }
             notifyAndClose('Reject แล้ว — SWO กลับไปยัง Supervisor');
         } catch (e) { console.error(e); }
     };
@@ -732,7 +744,7 @@ export const SWOCloseWorkflow = () => {
                     role: user.role,
                     action: 'Approve',
                     menu: 'Closures',
-                    detail: `CD approved SWO closure: ${selectedSwoForModal.swoNo}`
+                    detail: `Approve SWO No. ${selectedSwoForModal.swoNo}`
                 });
             }
             
@@ -749,6 +761,16 @@ export const SWOCloseWorkflow = () => {
                 cd_closure_note: note,
                 cd_reject_reason: reason,
             });
+            if (user) {
+                await logActivity({
+                    uid: user.uid,
+                    name: user.name,
+                    role: user.role,
+                    action: 'Reject',
+                    menu: 'Closures',
+                    detail: `Reject SWO No. ${selectedSwoForModal.swoNo} (Reason: ${reason})`
+                });
+            }
             notifyAndClose('Reject แล้ว — ส่งกลับ PM');
         } catch (e) { console.error(e); }
     };
@@ -769,7 +791,7 @@ export const SWOCloseWorkflow = () => {
                     role: user.role,
                     action: 'Approve',
                     menu: 'Closures',
-                    detail: `MD approved and closed SWO: ${selectedSwoForModal.swoNo}`
+                    detail: `Approve SWO No. ${selectedSwoForModal.swoNo} (Closed)`
                 });
             }
             
@@ -785,6 +807,16 @@ export const SWOCloseWorkflow = () => {
                 closure_status: 'PM Review',
                 md_reject_reason: reason,
             });
+            if (user) {
+                await logActivity({
+                    uid: user.uid,
+                    name: user.name,
+                    role: user.role,
+                    action: 'Reject',
+                    menu: 'Closures',
+                    detail: `Reject SWO No. ${selectedSwoForModal.swoNo} (Reason: ${reason})`
+                });
+            }
             notifyAndClose('Reject แล้ว — ส่งกลับ PM');
         } catch (e) { console.error(e); }
     };

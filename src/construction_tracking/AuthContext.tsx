@@ -9,7 +9,7 @@ import {
     GoogleAuthProvider,
     signInWithPopup
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, getDocs, collection, query, limit } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocs, collection, query, limit, onSnapshot } from 'firebase/firestore';
 import { auth, db, logActivity } from './firebase';
 
 export type Role = 'Admin' | 'MD' | 'GM' | 'CD' | 'PCM' | 'HRM' | 'PM' | 'CM' | 'Supervisor' | 'Staff' | 'HR' | 'Procurement' | 'Site Admin';
@@ -53,24 +53,42 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        let unsubscribeSnapshot: (() => void) | null = null;
+
+        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
-            if (user) {
-                // Fetch the user's role and status from Firestore
-                const userDocRef = doc(db, 'users', user.uid);
-                const userDocSnap = await getDoc(userDocRef);
-                if (userDocSnap.exists()) {
-                    setAppUser({ uid: user.uid, ...userDocSnap.data() } as AppUser);
-                } else {
-                    setAppUser(null);
-                }
-            } else {
+            if (!user) {
                 setAppUser(null);
+                setLoading(false);
+                if (unsubscribeSnapshot) {
+                    unsubscribeSnapshot();
+                    unsubscribeSnapshot = null;
+                }
+                return;
             }
-            setLoading(false);
+            // Subscribe to current user's document so when Admin updates role/assigned_projects, it takes effect immediately without refresh
+            const userDocRef = doc(db, 'users', user.uid);
+            unsubscribeSnapshot = onSnapshot(
+                userDocRef,
+                (snap) => {
+                    if (snap.exists()) {
+                        setAppUser({ uid: user.uid, ...snap.data() } as AppUser);
+                    } else {
+                        setAppUser(null);
+                    }
+                    setLoading(false);
+                },
+                () => {
+                    setAppUser(null);
+                    setLoading(false);
+                }
+            );
         });
 
-        return unsubscribe;
+        return () => {
+            if (unsubscribeSnapshot) unsubscribeSnapshot();
+            unsubscribeAuth();
+        };
     }, []);
 
     const register = async (email: string, password: string, firstName: string, lastName: string, position: string) => {

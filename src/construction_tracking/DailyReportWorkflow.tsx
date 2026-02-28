@@ -121,7 +121,8 @@ export const DailyReportManager = () => {
                 });
             });
             const upToDate = Object.values(cumulativeTotals).reduce((s: number, v) => s + v, 0);
-            c1Prog = totalRequired > 0 ? ((upToDate / totalRequired) * 100).toFixed(1) + '%' : '0.0%';
+            const pct = totalRequired > 0 ? Math.min(100, (upToDate / totalRequired) * 100) : 0;
+            c1Prog = pct.toFixed(1) + '%';
         }
 
         return {
@@ -298,28 +299,28 @@ export const DailyReportManager = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
-                <table className="w-full text-sm text-center text-nowrap">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <table className="w-full text-sm text-center table-fixed">
                     <thead className="text-gray-800 border-b border-gray-300">
                         <tr>
-                            <th className="px-4 py-3 font-semibold bg-[#CCE5FF] border-r border-gray-300 min-w-[120px]">Project No.</th>
-                            <th className="px-4 py-3 font-semibold bg-[#00FFFF] border-r border-gray-300 min-w-[100px]">SWO Status</th>
-                            <th className="px-4 py-3 font-semibold bg-[#E0E0FF] border-r border-gray-300 min-w-[120px]">Task Status</th>
-                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] border-r border-gray-300 min-w-[140px]">Previous Report Date</th>
-                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] border-r border-gray-300 min-w-[130px]">Supervisor Name</th>
-                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] border-r border-gray-300 min-w-[120px]">SWO no.</th>
-                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] border-r border-gray-300 min-w-[180px]">Work Name/Scope</th>
-                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] min-w-[120px]">C1 Progress %</th>
+                            <th className="px-4 py-3 font-semibold bg-[#CCE5FF] border-r border-gray-300 w-[10%]">Project No.</th>
+                            <th className="px-4 py-3 font-semibold bg-[#00FFFF] border-r border-gray-300 w-[9%]">SWO Status</th>
+                            <th className="px-4 py-3 font-semibold bg-[#E0E0FF] border-r border-gray-300 w-[9%]">Task Status</th>
+                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[11%]">Previous Report Date</th>
+                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[12%]">Supervisor Name</th>
+                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[10%]">SWO no.</th>
+                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[22%]">Work Name/Scope</th>
+                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[9%]">C1 Progress %</th>
                             {(user?.role === 'Admin' || user?.role === 'PM') && (
-                                <th className="px-4 py-3 font-semibold bg-[#FFE6CC] min-w-[80px]">Actions</th>
+                                <th className="px-4 py-3 font-semibold bg-[#FFE6CC] w-[8%]">Actions</th>
                             )}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                         {visibleSwoList.map(item => (
                             <tr key={item.id} onClick={() => setSelectedSwo(swos.find(s => s.id === item.id))} className="hover:bg-gray-100 transition-colors cursor-pointer group">
-                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#E6F2FF] group-hover:bg-[#cce6ff] text-xs font-medium">{item.project_no}</td>
-                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#E6FFFF] group-hover:bg-[#ccffff]">
+                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#E6F2FF] group-hover:bg-[#cce6ff] text-xs font-medium truncate" title={item.project_no}>{item.project_no}</td>
+                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#E6FFFF] group-hover:bg-[#ccffff] whitespace-nowrap">
                                     <span className={`font-medium text-xs ${item.status === 'Accepted' ? 'text-green-600' :
                                         item.status === 'Assigned' ? 'text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-bold' :
                                             item.status === 'Request Change' ? 'text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full font-bold' :
@@ -328,15 +329,15 @@ export const DailyReportManager = () => {
                                         {item.status}
                                     </span>
                                 </td>
-                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#F0F0FF] group-hover:bg-[#e0e0ff]">
+                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#F0F0FF] group-hover:bg-[#e0e0ff] whitespace-nowrap">
                                     <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getStatusBadge(item.task_status)}`}>
                                         {item.task_status}
                                     </span>
                                 </td>
-                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-xs">{item.prev_date}</td>
-                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-xs">{item.supervisor}</td>
-                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-xs font-medium">{item.swo_no}</td>
-                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-left text-xs">{item.scope}</td>
+                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-xs whitespace-nowrap">{item.prev_date}</td>
+                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-xs truncate" title={item.supervisor}>{item.supervisor}</td>
+                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-xs font-medium whitespace-nowrap">{item.swo_no}</td>
+                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-left text-xs truncate max-w-0" title={item.scope}>{item.scope}</td>
                                 <td className="px-3 py-1.5 bg-[#FFF5EE] group-hover:bg-[#ffe8d6]">
                                     <span className={`px-2 py-0.5 rounded text-xs font-bold ${parseFloat(item.c1_prog) >= 100 ? 'bg-green-100 text-green-700' : parseFloat(item.c1_prog) > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
                                         {item.c1_prog}
@@ -783,6 +784,18 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
             } else {
                 await addDoc(collection(db, "daily_reports"), reportData);
             }
+            if (user) {
+                await logActivity({
+                    uid: user.uid,
+                    name: user.name,
+                    role: user.role,
+                    action: 'Create',
+                    menu: 'Daily Report',
+                    detail: existingReport?.status === 'Rejected'
+                        ? `Create Daily Report SWO No. ${swo?.swo_no || ''} Date ${selectedDate} (Resubmit)`
+                        : `Create Daily Report SWO No. ${swo?.swo_no || ''} Date ${selectedDate}`
+                });
+            }
             setFiles(null);
             setUploading(false);
             showAlert('success',
@@ -1144,7 +1157,7 @@ export const ApprovalDashboard = () => {
                     role: user.role,
                     action: 'Approve',
                     menu: 'Daily Report',
-                    detail: `Approved daily report: ${report.project_name} - ${report.date} (Status: ${nextStatus})`
+                    detail: `Approve Daily Report SWO No. ${report.swo_no || report.swo || ''} Date ${report.date} (Status: ${nextStatus})`
                 });
             }
             
@@ -1179,7 +1192,7 @@ export const ApprovalDashboard = () => {
                     role: user.role,
                     action: 'Reject',
                     menu: 'Daily Report',
-                    detail: `Rejected daily report: ${report.project_name} - ${report.date} (Reason: ${rejectReason.trim()})`
+                    detail: `Reject Daily Report SWO No. ${report.swo_no || report.swo || ''} Date ${report.date} (Reason: ${rejectReason.trim()})`
                 });
             }
             
