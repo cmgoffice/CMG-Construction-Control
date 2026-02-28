@@ -63,6 +63,13 @@ export const useAuth = () => {
 
 export const AuthProvider = RealAuthProvider;
 
+// --- Default path per role (redirect here when no permission, so no Access Denied page) ---
+const getDefaultPathForRole = (role: string): string => {
+  if (role === 'Admin' || role === 'Administrator') return '/admin';
+  if (role === 'Supervisor') return '/daily-report';
+  return '/dashboard';
+};
+
 // --- Protected Route Wrapper ---
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -78,16 +85,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen bg-gray-50">
-        <ShieldAlert className="w-16 h-16 text-red-500 mb-4" />
-        <h1 className="text-2xl font-bold text-gray-800">Access Denied</h1>
-        <p className="text-gray-600 mt-2">You don't have permission to view this page.</p>
-        <Link to="/dashboard" className="mt-6 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
-          Return to Dashboard
-        </Link>
-      </div>
-    );
+    return <Navigate to={getDefaultPathForRole(user.role)} replace />;
   }
 
   return <>{children}</>;
@@ -514,13 +512,11 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
   );
 };
 
-// --- Login Guard: redirect authenticated users to their default page ---
+// --- Login Guard: redirect authenticated users to their default page by role ---
 const LoginGuard = () => {
   const { appUser } = useAuthContext();
   if (appUser && appUser.status === 'Approved') {
-    if (appUser.role === 'Supervisor') return <Navigate to="/daily-report" replace />;
-    if (appUser.role === 'Admin') return <Navigate to="/admin" replace />;
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={getDefaultPathForRole(appUser.role)} replace />;
   }
   return <AuthForm />;
 };

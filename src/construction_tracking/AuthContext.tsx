@@ -7,7 +7,9 @@ import {
     User as FirebaseUser,
     sendPasswordResetEmail,
     GoogleAuthProvider,
-    signInWithPopup
+    signInWithPopup,
+    setPersistence,
+    browserSessionPersistence
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, getDocs, collection, query, limit, onSnapshot } from 'firebase/firestore';
 import { auth, db, logActivity } from './firebase';
@@ -128,6 +130,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const login = async (email: string, password: string) => {
+        await setPersistence(auth, browserSessionPersistence);
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
@@ -160,6 +163,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const loginWithGoogle = async () => {
+        await setPersistence(auth, browserSessionPersistence);
         const result = await signInWithPopup(auth, googleProvider);
         const user = result.user;
 
