@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-import { db } from './firebase';
+import { db, logActivity } from './firebase';
 
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
 
@@ -35,6 +35,7 @@ export const AdminDashboard = () => {
     const [logFilterDate, setLogFilterDate] = useState('');
 
     const [projects, setProjects] = useState<any[]>([]);
+    const [userSearchQuery, setUserSearchQuery] = useState('');
 
 
 
@@ -113,8 +114,21 @@ export const AdminDashboard = () => {
     const handleApprove = async (userId: string) => {
 
         try {
+            const userToApprove = users.find(u => u.uid === userId);
 
             await updateDoc(doc(db, 'users', userId), { status: 'Approved' });
+
+            // Log user approval
+            if (appUser && userToApprove) {
+                await logActivity({
+                    uid: appUser.uid,
+                    name: `${appUser.firstName} ${appUser.lastName}`,
+                    role: appUser.role,
+                    action: 'Approve',
+                    menu: 'Admin Panel',
+                    detail: `Approved user: ${userToApprove.firstName} ${userToApprove.lastName} (${userToApprove.email})`
+                });
+            }
 
             showAlert('success', 'อนุมัติสำเร็จ', 'อนุมัติผู้ใช้งานเรียบร้อยแล้ว');
 
@@ -135,8 +149,21 @@ export const AdminDashboard = () => {
         showConfirm('ยืนยันการปฏิเสธ?', 'คุณแน่ใจว่าต้องการปฏิเสธผู้ใช้งานนี้ใช่หรือไม่?', async () => {
 
             try {
+                const userToReject = users.find(u => u.uid === userId);
 
                 await updateDoc(doc(db, 'users', userId), { status: 'Rejected' });
+
+                // Log user rejection
+                if (appUser && userToReject) {
+                    await logActivity({
+                        uid: appUser.uid,
+                        name: `${appUser.firstName} ${appUser.lastName}`,
+                        role: appUser.role,
+                        action: 'Reject',
+                        menu: 'Admin Panel',
+                        detail: `Rejected user: ${userToReject.firstName} ${userToReject.lastName} (${userToReject.email})`
+                    });
+                }
 
             } catch (error) {
 
@@ -302,10 +329,23 @@ export const AdminDashboard = () => {
 
 
 
-    const pendingUsers = users.filter(u => u.status === 'Pending');
+    // Filter users based on search query
+    const filteredUsers = users.filter(user => {
+        if (!userSearchQuery.trim()) return true;
+        const query = userSearchQuery.toLowerCase();
+        const fullName = `${user.firstName} ${user.lastName}`.toLowerCase();
+        const email = (user.email || '').toLowerCase();
+        const position = (user.position || '').toLowerCase();
+        const role = (user.role || '').toLowerCase();
+        
+        return fullName.includes(query) || 
+               email.includes(query) || 
+               position.includes(query) ||
+               role.includes(query);
+    });
 
-    const otherUsers = users.filter(u => u.status !== 'Pending');
-
+    const pendingUsers = filteredUsers.filter(u => u.status === 'Pending');
+    const otherUsers = filteredUsers.filter(u => u.status !== 'Pending');
     const sortedUsers = [...pendingUsers, ...otherUsers];
 
 
@@ -423,9 +463,36 @@ export const AdminDashboard = () => {
 
 
             {activeTab === 'users' && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="space-y-4">
+                {/* Search Filter */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                    <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+                        <div className="flex-1">
+                            <label className="block text-sm font-medium text-gray-600 mb-2">ค้นหาผู้ใช้งาน</label>
+                            <input
+                                type="text"
+                                placeholder="พิมพ์ชื่อ, อีเมล, ตำแหน่ง หรือ Role..."
+                                value={userSearchQuery}
+                                onChange={e => setUserSearchQuery(e.target.value)}
+                                className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
+                        {userSearchQuery && (
+                            <button
+                                onClick={() => setUserSearchQuery('')}
+                                className="text-sm text-red-500 hover:text-red-700 px-3 py-2 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                            >
+                                ล้างการค้นหา
+                            </button>
+                        )}
+                        <div className="text-sm text-gray-500">
+                            แสดง {sortedUsers.length} / {users.length} คน
+                        </div>
+                    </div>
+                </div>
 
-                <div className="overflow-x-auto">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="overflow-x-auto">
 
                     <table className="w-full text-left text-sm">
 
@@ -837,8 +904,9 @@ export const AdminDashboard = () => {
 
                     </table>
 
-                </div>
+                    </div>
 
+                </div>
             </div>
             )} {/* end activeTab === 'users' */}
 

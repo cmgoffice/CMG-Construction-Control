@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Save, Send, HardHat, FileText, Wrench, Users, Download, Upload, FileSpreadsheet, X } from 'lucide-react';
-import { db } from './firebase';
+import { db, logActivity } from './firebase';
 import { collection, onSnapshot, query, addDoc, doc, updateDoc, getDocs, where, deleteDoc } from 'firebase/firestore';
 import { useAuth } from './AuthRBACRouter';
 import { AlertModal, useAlert } from './AlertModal';
@@ -288,6 +288,19 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                     ...payload,
                     created_at: new Date().toISOString()
                 });
+                
+                // Log SWO creation
+                if (user) {
+                    await logActivity({
+                        uid: user.uid,
+                        name: user.name,
+                        role: user.role,
+                        action: 'Create',
+                        menu: 'Create SWO',
+                        detail: `Created SWO: ${finalSwoNo} - ${formData.work_name}`
+                    });
+                }
+                
                 showAlert('success', 'สร้างสำเร็จ', `SWO ${finalSwoNo} ถูกสร้างและบันทึกเรียบร้อยแล้ว`);
                 setFormData(prev => ({ ...prev, work_name: '', supervisor_id: '', additional_notes: '' }));
                 setActivities([{ id: Date.now(), description: '', unit: '', qty_total: '', rate: '' }]);

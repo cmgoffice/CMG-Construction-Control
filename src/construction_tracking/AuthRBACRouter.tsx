@@ -106,25 +106,7 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
   const didMountRef = useRef(false);
   const [pendingUserCount, setPendingUserCount] = useState(0);
 
-  // Log menu navigation — deduplicate with lastLoggedPath ref
-  const lastLoggedPath = useRef<string | null>(null);
-  useEffect(() => {
-    if (!user) return;
-    if (location.pathname === lastLoggedPath.current) return;
-    lastLoggedPath.current = location.pathname;
-    const menuNameMap: Record<string, string> = {
-      '/dashboard': 'Projects',
-      '/swo-creation': 'Create SWO',
-      '/daily-report': 'Daily Report',
-      '/approvals': 'Approvals',
-      '/closures': 'Closures',
-      '/analytics': 'Analytics',
-      '/admin': 'Admin Panel',
-      '/profile': 'Profile',
-    };
-    const menuName = menuNameMap[location.pathname] || location.pathname;
-    logActivity({ uid: user.uid, name: user.name, role: user.role, action: 'Navigate', menu: menuName });
-  }, [location.pathname, user?.uid]); // eslint-disable-line
+  // Menu navigation logging removed as per requirement
 
   useEffect(() => {
     const isAdminRole = user?.role === 'Admin' || (user?.role as string) === 'Administrator';

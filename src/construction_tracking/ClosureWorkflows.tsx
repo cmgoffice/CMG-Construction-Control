@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthRBACRouter';
-import { FileCheck, CheckCircle2, X, Eye, Check, AlertCircle, XCircle, Clock, ChevronRight, ShieldAlert, Trash2 } from 'lucide-react';
-import { db } from './firebase';
+import { FileCheck, CheckCircle2, X, Eye, Check, AlertCircle, XCircle, Clock, ChevronRight, ShieldAlert, Trash2, RefreshCw } from 'lucide-react';
+import { db, logActivity } from './firebase';
 import { collection, onSnapshot, query, doc, updateDoc, where, deleteDoc } from 'firebase/firestore';
 import { AlertModal, useAlert } from './AlertModal';
 
@@ -171,6 +171,109 @@ const DailyReportViewModal = ({ report, onClose }: { report: any; onClose: () =>
 
                 <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end">
                     <button onClick={onClose} className="px-5 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 font-medium text-sm">Close</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- Supervisor PM Rejection Details Modal ---
+const SupervisorRejectionModal = ({ isOpen, onClose, swoData, onResubmit, onCancel }: {
+    isOpen: boolean;
+    onClose: () => void;
+    swoData: any;
+    onResubmit: () => void;
+    onCancel: () => void;
+}) => {
+    if (!isOpen || !swoData) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
+                {/* Header */}
+                <div className="p-6 border-b border-gray-200 bg-red-50">
+                    <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                            <div className="p-2 bg-red-100 rounded-lg">
+                                <XCircle className="w-6 h-6 text-red-600" />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold text-red-900">คำขอปิด SWO ถูก Reject</h2>
+                                <p className="text-red-700 mt-1">SWO: {swoData.swo_no} - {swoData.work_name}</p>
+                            </div>
+                        </div>
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Content */}
+                <div className="p-6 space-y-6">
+                    {/* PM Rejection Reason */}
+                    {swoData.pm_reject_reason && (
+                        <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-4">
+                            <div className="flex items-start gap-3">
+                                <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                                <div>
+                                    <h3 className="font-bold text-red-800 text-sm">เหตุผลที่ PM Reject:</h3>
+                                    <p className="text-red-700 mt-2 leading-relaxed">{swoData.pm_reject_reason}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* SWO Details */}
+                    <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                        <h3 className="font-semibold text-gray-800">รายละเอียด SWO</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <span className="text-gray-600">SWO No:</span>
+                                <span className="ml-2 font-medium text-gray-900">{swoData.swo_no}</span>
+                            </div>
+                            <div>
+                                <span className="text-gray-600">Work Name:</span>
+                                <span className="ml-2 font-medium text-gray-900">{swoData.work_name}</span>
+                            </div>
+                            <div>
+                                <span className="text-gray-600">Status:</span>
+                                <span className="ml-2 px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium">
+                                    Rejected by PM
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Instructions */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                            <AlertCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                            <div>
+                                <h3 className="font-semibold text-blue-800 text-sm">ขั้นตอนต่อไป</h3>
+                                <p className="text-blue-700 mt-1 text-sm">
+                                    คุณสามารถแก้ไขปัญหาตามเหตุผลที่ PM ระบุ แล้วส่งคำขอใหม่อีกครั้ง หรือยกเลิกคำขอปิด SWO นี้
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Actions */}
+                <div className="p-6 border-t border-gray-200 bg-gray-50 flex flex-col sm:flex-row gap-3 justify-end">
+                    <button
+                        onClick={onCancel}
+                        className="px-5 py-2.5 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                        <XCircle className="w-4 h-4" />
+                        ยกเลิกคำขอ
+                    </button>
+                    <button
+                        onClick={onResubmit}
+                        className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                        <RefreshCw className="w-4 h-4" />
+                        ส่งคำขอใหม่
+                    </button>
                 </div>
             </div>
         </div>
@@ -496,6 +599,10 @@ export const SWOCloseWorkflow = () => {
     // Admin delete confirm
     const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
     const [deleteTargetNo, setDeleteTargetNo] = useState<string>('');
+    
+    // Supervisor rejection modal state
+    const [isRejectionModalOpen, setIsRejectionModalOpen] = useState(false);
+    const [rejectedSwoData, setRejectedSwoData] = useState<any>(null);
 
     // Resolve supervisor Firestore doc ID by email
     useEffect(() => {
@@ -531,8 +638,16 @@ export const SWOCloseWorkflow = () => {
                     return cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
                 }
                 if (user.role === 'Supervisor') {
-                    if (supervisorDocId) return swo.supervisor_id === supervisorDocId;
-                    return swo.supervisor_name === user.name;
+                    // Include SWOs assigned to this supervisor (for closure workflow or rejected items)
+                    const isAssigned = supervisorDocId ? swo.supervisor_id === supervisorDocId : swo.supervisor_name === user.name;
+                    if (!isAssigned) return false;
+                    
+                    // Show closure workflow items OR rejected items
+                    const cs = swo.closure_status;
+                    const isInClosureFlow = cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
+                    const isRejected = !cs && swo.pm_reject_reason;
+                    
+                    return isInClosureFlow || isRejected;
                 }
                 return user.assigned_projects?.includes(swo.project_id);
             });
@@ -570,6 +685,19 @@ export const SWOCloseWorkflow = () => {
                 cd_reject_reason: null,
                 md_reject_reason: null,
             });
+            
+            // Log PM approval
+            if (user) {
+                await logActivity({
+                    uid: user.uid,
+                    name: user.name,
+                    role: user.role,
+                    action: 'Approve',
+                    menu: 'Closures',
+                    detail: `PM approved SWO closure: ${selectedSwoForModal.swoNo} (Quality: ${quality})`
+                });
+            }
+            
             notifyAndClose('ส่งต่อให้ CD เรียบร้อยแล้ว');
         } catch (e) { console.error(e); }
     };
@@ -595,6 +723,19 @@ export const SWOCloseWorkflow = () => {
                 cd_closure_note: note,
                 md_reject_reason: null,
             });
+            
+            // Log CD approval
+            if (user) {
+                await logActivity({
+                    uid: user.uid,
+                    name: user.name,
+                    role: user.role,
+                    action: 'Approve',
+                    menu: 'Closures',
+                    detail: `CD approved SWO closure: ${selectedSwoForModal.swoNo}`
+                });
+            }
+            
             notifyAndClose('ส่งต่อให้ MD เรียบร้อยแล้ว');
         } catch (e) { console.error(e); }
     };
@@ -619,6 +760,19 @@ export const SWOCloseWorkflow = () => {
             await updateDoc(doc(db, "site_work_orders", selectedSwoForModal.id), {
                 closure_status: 'Closed SWO',
             });
+            
+            // Log MD approval and SWO closure
+            if (user) {
+                await logActivity({
+                    uid: user.uid,
+                    name: user.name,
+                    role: user.role,
+                    action: 'Approve',
+                    menu: 'Closures',
+                    detail: `MD approved and closed SWO: ${selectedSwoForModal.swoNo}`
+                });
+            }
+            
             notifyAndClose('SWO ปิดเรียบร้อยแล้ว');
         } catch (e) { console.error(e); }
     };
@@ -649,6 +803,48 @@ export const SWOCloseWorkflow = () => {
             setSelectedSwoToRequest(null);
             showAlert('success', 'ส่งคำขอสำเร็จ', 'ส่งคำขอปิด SWO ไปยัง PM เรียบร้อยแล้ว');
         } catch (e) { console.error(e); }
+    };
+
+    // Supervisor: handle rejection modal actions
+    const handleOpenRejectionModal = (swo: any) => {
+        setRejectedSwoData(swo);
+        setIsRejectionModalOpen(true);
+    };
+
+    const handleResubmitRejectedSwo = async () => {
+        if (!rejectedSwoData) return;
+        try {
+            await updateDoc(doc(db, "site_work_orders", rejectedSwoData.id), {
+                closure_status: 'PM Review',
+                pm_reject_reason: null,
+                cd_reject_reason: null,
+                md_reject_reason: null,
+            });
+            setIsRejectionModalOpen(false);
+            setRejectedSwoData(null);
+            showAlert('success', 'ส่งคำขอใหม่สำเร็จ', 'ส่งคำขอปิด SWO ใหม่ไปยัง PM เรียบร้อยแล้ว');
+        } catch (e) { 
+            console.error(e);
+            showAlert('error', 'เกิดข้อผิดพลาด', 'ไม่สามารถส่งคำขอใหม่ได้');
+        }
+    };
+
+    const handleCancelRejectedSwo = async () => {
+        if (!rejectedSwoData) return;
+        try {
+            await updateDoc(doc(db, "site_work_orders", rejectedSwoData.id), {
+                closure_status: null,
+                pm_reject_reason: null,
+                cd_reject_reason: null,
+                md_reject_reason: null,
+            });
+            setIsRejectionModalOpen(false);
+            setRejectedSwoData(null);
+            showAlert('success', 'ยกเลิกคำขอสำเร็จ', 'ยกเลิกคำขอปิด SWO เรียบร้อยแล้ว');
+        } catch (e) { 
+            console.error(e);
+            showAlert('error', 'เกิดข้อผิดพลาด', 'ไม่สามารถยกเลิกคำขอได้');
+        }
     };
 
     // Admin: delete SWO record
@@ -745,47 +941,68 @@ export const SWOCloseWorkflow = () => {
                             const cs = swo.closure_status || 'Active';
                             const isClosed = cs === 'Closed SWO';
                             const canCancel = user?.role === 'Supervisor' && cs === 'PM Review';
+                            const isRejectedBySupervisor = user?.role === 'Supervisor' && !cs && swo.pm_reject_reason;
+                            
                             return (
                                 <tr
                                     key={swo.id}
-                                    onClick={() => openDetailModal(swo)}
-                                    className={`cursor-pointer hover:bg-blue-50/60 transition-colors ${isClosed ? 'bg-green-50/30' : ''}`}
+                                    onClick={() => isRejectedBySupervisor ? handleOpenRejectionModal(swo) : openDetailModal(swo)}
+                                    className={`cursor-pointer hover:bg-blue-50/60 transition-colors ${isClosed ? 'bg-green-50/30' : isRejectedBySupervisor ? 'bg-red-50/30' : ''}`}
                                 >
                                     <td className="px-6 py-4 font-medium text-gray-900">{swo.swo_no}</td>
                                     <td className="px-6 py-4 text-gray-600">{swo.work_name}</td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusBadge(cs)}`}>{cs}</span>
-                                        {swo.cd_reject_reason && cs === 'PM Review' && (
-                                            <span className="ml-2 text-xs text-red-600 font-medium">CD Rejected</span>
-                                        )}
-                                        {swo.md_reject_reason && cs === 'PM Review' && (
-                                            <span className="ml-2 text-xs text-red-600 font-medium">MD Rejected</span>
+                                        {isRejectedBySupervisor ? (
+                                            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                                                PM Rejected
+                                            </span>
+                                        ) : (
+                                            <>
+                                                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusBadge(cs)}`}>{cs}</span>
+                                                {swo.cd_reject_reason && cs === 'PM Review' && (
+                                                    <span className="ml-2 text-xs text-red-600 font-medium">CD Rejected</span>
+                                                )}
+                                                {swo.md_reject_reason && cs === 'PM Review' && (
+                                                    <span className="ml-2 text-xs text-red-600 font-medium">MD Rejected</span>
+                                                )}
+                                            </>
                                         )}
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
-                                            {canCancel && (
+                                            {isRejectedBySupervisor ? (
                                                 <button
-                                                    onClick={() => handleCancelRequest(swo.id)}
+                                                    onClick={() => handleOpenRejectionModal(swo)}
                                                     className="px-3 py-1.5 bg-red-50 border border-red-200 text-red-600 rounded hover:bg-red-100 font-medium text-xs transition-colors flex items-center gap-1"
                                                 >
-                                                    <XCircle className="w-3.5 h-3.5" /> Cancel Request
+                                                    <AlertCircle className="w-3.5 h-3.5" /> View Rejection
                                                 </button>
-                                            )}
-                                            <button
-                                                onClick={() => openDetailModal(swo)}
-                                                className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 font-medium text-xs transition-colors flex items-center gap-1"
-                                            >
-                                                <Eye className="w-3.5 h-3.5" /> View Details
-                                            </button>
-                                            {user?.role === 'Admin' && (
-                                                <button
-                                                    onClick={() => { setDeleteTargetId(swo.id); setDeleteTargetNo(swo.swo_no || swo.id); }}
-                                                    className="px-3 py-1.5 bg-red-600 text-white rounded hover:bg-red-700 font-medium text-xs transition-colors flex items-center gap-1"
-                                                    title="ลบ SWO นี้"
-                                                >
-                                                    <Trash2 className="w-3.5 h-3.5" /> ลบ
-                                                </button>
+                                            ) : (
+                                                <>
+                                                    {canCancel && (
+                                                        <button
+                                                            onClick={() => handleCancelRequest(swo.id)}
+                                                            className="px-3 py-1.5 bg-red-50 border border-red-200 text-red-600 rounded hover:bg-red-100 font-medium text-xs transition-colors flex items-center gap-1"
+                                                        >
+                                                            <XCircle className="w-3.5 h-3.5" /> Cancel Request
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => openDetailModal(swo)}
+                                                        className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 font-medium text-xs transition-colors flex items-center gap-1"
+                                                    >
+                                                        <Eye className="w-3.5 h-3.5" /> View Details
+                                                    </button>
+                                                    {user?.role === 'Admin' && (
+                                                        <button
+                                                            onClick={() => { setDeleteTargetId(swo.id); setDeleteTargetNo(swo.swo_no || swo.id); }}
+                                                            className="px-3 py-1.5 bg-red-600 text-white rounded hover:bg-red-700 font-medium text-xs transition-colors flex items-center gap-1"
+                                                            title="ลบ SWO นี้"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5" /> ลบ
+                                                        </button>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     </td>
@@ -855,6 +1072,15 @@ export const SWOCloseWorkflow = () => {
                     </div>
                 </div>
             )}
+
+            {/* Supervisor Rejection Modal */}
+            <SupervisorRejectionModal
+                isOpen={isRejectionModalOpen}
+                onClose={() => setIsRejectionModalOpen(false)}
+                swoData={rejectedSwoData}
+                onResubmit={handleResubmitRejectedSwo}
+                onCancel={handleCancelRejectedSwo}
+            />
 
             <ProposeDetailModal
                 isOpen={isDetailModalOpen}

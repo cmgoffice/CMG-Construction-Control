@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { CheckCircle, XCircle, Clock, Save, Send, AlertTriangle, MessageSquare, FileText } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthRBACRouter';
-import { db, storage } from './firebase';
+import { db, storage, logActivity } from './firebase';
 import { collection, addDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import SWOCreationForm from './SWOCreationForm';
@@ -419,9 +419,23 @@ export const SwoAcceptanceView = ({ swo, allEquipments = [], allTeams = [], onBa
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-8">
                 <div className="bg-blue-50 border border-blue-100 rounded-lg p-5 flex gap-4 items-start">
                     <AlertTriangle className="w-6 h-6 text-blue-500 shrink-0 mt-0.5" />
-                    <div>
+                    <div className="flex-1">
                         <h3 className="text-lg font-bold text-blue-900">SWO No: {swo.swo_no}</h3>
                         <p className="text-blue-800 mt-1"><strong>Scope:</strong> {swo.work_name}</p>
+                        <div className="flex flex-col sm:flex-row gap-4 mt-3">
+                            <div className="flex items-center gap-2 text-blue-700">
+                                <span className="font-semibold">Start Date:</span>
+                                <span className="bg-blue-100 px-2 py-1 rounded text-sm font-medium">
+                                    {swo.start_date || 'Not specified'}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-blue-700">
+                                <span className="font-semibold">End Date:</span>
+                                <span className="bg-blue-100 px-2 py-1 rounded text-sm font-medium">
+                                    {swo.finish_date || 'Not specified'}
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -797,6 +811,20 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">Daily Progress Report</h1>
                         <p className="text-gray-500 mt-1">SWO: <span className="font-semibold text-gray-700">{swo?.swo_no} - {swo?.work_name}</span></p>
+                        <div className="flex flex-col sm:flex-row gap-4 mt-2">
+                            <div className="flex items-center gap-2 text-gray-600">
+                                <span className="font-medium">Start Date:</span>
+                                <span className="bg-gray-100 px-2 py-1 rounded text-sm font-medium">
+                                    {swo?.start_date || 'Not specified'}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-gray-600">
+                                <span className="font-medium">End Date:</span>
+                                <span className="bg-gray-100 px-2 py-1 rounded text-sm font-medium">
+                                    {swo?.finish_date || 'Not specified'}
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div className="text-right">
@@ -1107,6 +1135,19 @@ export const ApprovalDashboard = () => {
             if (report.status === 'Pending CM') updateData.cm_approved_by = user?.name || user?.role;
             if (nextStatus === 'Approved') updateData.pm_approved_by = user?.name || user?.role;
             await updateDoc(doc(db, "daily_reports", report.id), updateData);
+            
+            // Log daily report approval
+            if (user) {
+                await logActivity({
+                    uid: user.uid,
+                    name: user.name,
+                    role: user.role,
+                    action: 'Approve',
+                    menu: 'Daily Report',
+                    detail: `Approved daily report: ${report.project_name} - ${report.date} (Status: ${nextStatus})`
+                });
+            }
+            
             showAlert('success', 'อนุมัติสำเร็จ', `สถานะรายงานอัปเดตเป็น: ${nextStatus}`);
         } catch (e: any) { showAlert('error', 'เกิดข้อผิดพลาด', e.message); }
     };
@@ -1129,6 +1170,19 @@ export const ApprovalDashboard = () => {
                 cm_notes: cmNotes,
                 reject_reason: rejectReason.trim()
             });
+            
+            // Log daily report rejection
+            if (user) {
+                await logActivity({
+                    uid: user.uid,
+                    name: user.name,
+                    role: user.role,
+                    action: 'Reject',
+                    menu: 'Daily Report',
+                    detail: `Rejected daily report: ${report.project_name} - ${report.date} (Reason: ${rejectReason.trim()})`
+                });
+            }
+            
             setRejectModal({ open: false, report: null });
             showAlert('warning', 'Reject สำเร็จ', 'รายงานถูก Reject แล้ว');
         } catch (e: any) { showAlert('error', 'เกิดข้อผิดพลาด', e.message); }

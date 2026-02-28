@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthRBACRouter';
-import { db } from './firebase';
+import { db, logActivity } from './firebase';
 import { collection, addDoc, onSnapshot, query, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Plus, Search, Building2, Users, Wrench, HardHat, ShieldCheck, X, Download, Upload, FileSpreadsheet } from 'lucide-react';
 import { AlertModal, useAlert } from './AlertModal';
@@ -140,12 +140,30 @@ export default function ProjectDashboard() {
                 await updateDoc(doc(db, "projects", editingProjectId), {
                     ...formData,
                 });
+                // Log project update
+                await logActivity({
+                    uid: user?.uid || '',
+                    name: user?.name || '',
+                    role: user?.role || '',
+                    action: 'Update',
+                    menu: 'Projects',
+                    detail: `Updated project: ${formData.name}`
+                });
                 showAlert('success', 'อัปเดตสำเร็จ', 'Project ได้รับการอัปเดตเรียบร้อยแล้ว');
             } else {
                 await addDoc(collection(db, "projects"), {
                     ...formData,
                     status: 'ACTIVE',
                     created_at: new Date()
+                });
+                // Log project creation
+                await logActivity({
+                    uid: user?.uid || '',
+                    name: user?.name || '',
+                    role: user?.role || '',
+                    action: 'Create',
+                    menu: 'Projects',
+                    detail: `Created project: ${formData.name}`
                 });
                 showAlert('success', 'สร้างสำเร็จ', 'Project ถูกสร้างเรียบร้อยแล้ว');
             }

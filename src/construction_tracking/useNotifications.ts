@@ -194,6 +194,23 @@ export const useNotifications = (user: {
         }));
     }
 
+    // --- GM: SWOs waiting for closure review (same access as MD) ---
+    if (role === 'GM') {
+        const closurePending = swos.filter(s => 
+            s.closure_status === 'PM Review' || 
+            s.closure_status === 'CD Review' || 
+            s.closure_status === 'MD Review'
+        );
+        closurePending.forEach(s => items.push({
+            id: `closure-gm-${s.id}`,
+            label: `SWO ${s.swo_no || s.id}: ${s.work_name || ''} — รอ ${s.closure_status}`,
+            path: '/closures',
+            type: 'closure_review',
+            step: `รอ ${s.closure_status}`,
+            targetId: s.id
+        }));
+    }
+
     // --- PM: reports Pending CM (hand-on) or Pending PM (final approve) ---
     if (role === 'PM') {
         const pendingPM = reports.filter(r =>
@@ -233,7 +250,7 @@ export const useNotifications = (user: {
         }));
     }
 
-    // --- Admin: all pending approvals + change requests ---
+    // --- Admin: all pending approvals + change requests + closure reviews ---
     if (role === 'Admin') {
         const pendingCM = reports.filter(r => r.status === 'Pending CM');
         pendingCM.forEach(r => items.push({
@@ -262,6 +279,21 @@ export const useNotifications = (user: {
             path: '/swo-creation',
             type: 'change_request',
             step: 'ขอแก้ไข',
+            targetId: s.id
+        }));
+
+        // Admin can see all closure reviews
+        const closurePending = swos.filter(s => 
+            s.closure_status === 'PM Review' || 
+            s.closure_status === 'CD Review' || 
+            s.closure_status === 'MD Review'
+        );
+        closurePending.forEach(s => items.push({
+            id: `closure-admin-${s.id}`,
+            label: `SWO ${s.swo_no || s.id}: ${s.work_name || ''} — รอ ${s.closure_status}`,
+            path: '/closures',
+            type: 'closure_review',
+            step: `รอ ${s.closure_status}`,
             targetId: s.id
         }));
     }
