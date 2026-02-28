@@ -10,7 +10,7 @@ import { AlertModal, useAlert } from './AlertModal';
 
 type ReportStatus = 'Pending CM' | 'Pending PM' | 'Approved' | 'Rejected';
 
-const StatusBadge = ({ status }: { status: ReportStatus }) => {
+const StatusBadge = ({ status, compact }: { status: ReportStatus; compact?: boolean }) => {
     const styles = {
         'Pending CM': 'bg-yellow-100 text-yellow-800 border-yellow-200',
         'Pending PM': 'bg-blue-100 text-blue-800 border-blue-200',
@@ -19,6 +19,15 @@ const StatusBadge = ({ status }: { status: ReportStatus }) => {
     };
 
     const Icon = status === 'Approved' ? CheckCircle : status === 'Rejected' ? XCircle : Clock;
+
+    if (compact) {
+        return (
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${styles[status]}`}>
+                <Icon className="w-2.5 h-2.5 mr-0.5" />
+                {status}
+            </span>
+        );
+    }
 
     return (
         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${styles[status]}`}>
@@ -240,10 +249,10 @@ export const DailyReportManager = () => {
     return (
         <div className="max-w-7xl mx-auto space-y-6">
             <AlertModal {...modalProps} />
-            <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3 flex-wrap bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+            <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3 flex-wrap bg-white px-4 py-3 rounded-xl border border-gray-200 shadow-sm">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Site Work Order list (SWO)</h1>
-                    <p className="text-gray-500 mt-1">Select an SWO below to complete your Daily Progress Report.</p>
+                    <h1 className="text-lg font-bold text-gray-900">Site Work Order list (SWO)</h1>
+                    <p className="text-gray-500 text-xs mt-0.5">Select an SWO below to complete your Daily Progress Report.</p>
                 </div>
 
                 {/* Filters */}
@@ -299,68 +308,93 @@ export const DailyReportManager = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <table className="w-full text-sm text-center table-fixed">
-                    <thead className="text-gray-800 border-b border-gray-300">
-                        <tr>
-                            <th className="px-4 py-3 font-semibold bg-[#CCE5FF] border-r border-gray-300 w-[10%]">Project No.</th>
-                            <th className="px-4 py-3 font-semibold bg-[#00FFFF] border-r border-gray-300 w-[9%]">SWO Status</th>
-                            <th className="px-4 py-3 font-semibold bg-[#E0E0FF] border-r border-gray-300 w-[9%]">Task Status</th>
-                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[11%]">Previous Report Date</th>
-                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[12%]">Supervisor Name</th>
-                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[10%]">SWO no.</th>
-                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[22%]">Work Name/Scope</th>
-                            <th className="px-4 py-3 font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[9%]">C1 Progress %</th>
-                            {(user?.role === 'Admin' || user?.role === 'PM') && (
-                                <th className="px-4 py-3 font-semibold bg-[#FFE6CC] w-[8%]">Actions</th>
-                            )}
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                        {visibleSwoList.map(item => (
-                            <tr key={item.id} onClick={() => setSelectedSwo(swos.find(s => s.id === item.id))} className="hover:bg-gray-100 transition-colors cursor-pointer group">
-                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#E6F2FF] group-hover:bg-[#cce6ff] text-xs font-medium truncate" title={item.project_no}>{item.project_no}</td>
-                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#E6FFFF] group-hover:bg-[#ccffff] whitespace-nowrap">
-                                    <span className={`font-medium text-xs ${item.status === 'Accepted' ? 'text-green-600' :
-                                        item.status === 'Assigned' ? 'text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-bold' :
-                                            item.status === 'Request Change' ? 'text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full font-bold' :
-                                                'text-gray-600'
-                                        }`}>
-                                        {item.status}
-                                    </span>
-                                </td>
-                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#F0F0FF] group-hover:bg-[#e0e0ff] whitespace-nowrap">
-                                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getStatusBadge(item.task_status)}`}>
-                                        {item.task_status}
-                                    </span>
-                                </td>
-                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-xs whitespace-nowrap">{item.prev_date}</td>
-                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-xs truncate" title={item.supervisor}>{item.supervisor}</td>
-                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-xs font-medium whitespace-nowrap">{item.swo_no}</td>
-                                <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-left text-xs truncate max-w-0" title={item.scope}>{item.scope}</td>
-                                <td className="px-3 py-1.5 bg-[#FFF5EE] group-hover:bg-[#ffe8d6]">
-                                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${parseFloat(item.c1_prog) >= 100 ? 'bg-green-100 text-green-700' : parseFloat(item.c1_prog) > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                                        {item.c1_prog}
-                                    </span>
-                                </td>
-                                {(user?.role === 'Admin' || user?.role === 'PM') && (
-                                    <td className="px-3 py-1.5 bg-[#FFF5EE] group-hover:bg-[#ffe8d6]">
-                                        <button
-                                            onClick={(e) => handleDeleteSwo(item.id, e)}
-                                            className="text-red-500 hover:text-red-700 bg-white border border-red-200 hover:bg-red-50 px-2 py-0.5 rounded-md transition-colors text-xs font-semibold"
-                                        >
-                                            Delete
-                                        </button>
-                                    </td>
-                                )}
-                            </tr>
-                        ))}
-                        {visibleSwoList.length === 0 && (
-                            <tr><td colSpan={9} className="px-4 py-6 text-center text-gray-400 italic">No SWO found with current filters</td></tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
+            {/* Group by project: one table per project; hide table if project has no items */}
+            {(() => {
+                const byProject = visibleSwoList.reduce((acc, item) => {
+                    const p = item.project_no || 'Unknown';
+                    if (!acc[p]) acc[p] = []; acc[p].push(item); return acc;
+                }, {} as Record<string, typeof visibleSwoList>);
+                const projectOrder = Object.keys(byProject).sort();
+                if (projectOrder.length === 0) {
+                    return (
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                            <div className="px-6 py-12 text-center text-gray-400 italic">No SWO found with current filters</div>
+                        </div>
+                    );
+                }
+                return (
+                    <div className="space-y-8">
+                        {projectOrder.map(projectNo => {
+                            const rows = byProject[projectNo];
+                            if (!rows || rows.length === 0) return null;
+                            return (
+                                <div key={projectNo} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                                    <div className="px-3 py-1.5 bg-[#CCE5FF] border-b border-gray-200 font-semibold text-gray-800 text-xs">
+                                        โครงการ: {projectNo} <span className="text-gray-500 font-normal ml-2">({rows.length} รายการ)</span>
+                                    </div>
+                                    <table className="w-full text-sm text-center table-fixed">
+                                        <thead className="text-gray-800 border-b border-gray-300">
+                                            <tr>
+                                                <th className="px-3 py-1.5 text-xs font-semibold bg-[#CCE5FF] border-r border-gray-300 w-[10%]">Project No.</th>
+                                                <th className="px-3 py-1.5 text-xs font-semibold bg-[#00FFFF] border-r border-gray-300 w-[9%]">SWO Status</th>
+                                                <th className="px-3 py-1.5 text-xs font-semibold bg-[#E0E0FF] border-r border-gray-300 w-[9%]">Task Status</th>
+                                                <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[11%]">Previous Report Date</th>
+                                                <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[12%]">Supervisor Name</th>
+                                                <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[10%]">SWO no.</th>
+                                                <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[22%]">Work Name/Scope</th>
+                                                <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[9%]">C1 Progress %</th>
+                                                {(user?.role === 'Admin' || user?.role === 'PM') && (
+                                                    <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] w-[8%]">Actions</th>
+                                                )}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200">
+                                            {rows.map(item => (
+                                                <tr key={item.id} onClick={() => setSelectedSwo(swos.find(s => s.id === item.id))} className="hover:bg-gray-100 transition-colors cursor-pointer group">
+                                                    <td className="px-3 py-1.5 border-r border-gray-200 bg-[#E6F2FF] group-hover:bg-[#cce6ff] text-xs font-medium truncate" title={item.project_no}>{item.project_no}</td>
+                                                    <td className="px-3 py-1.5 border-r border-gray-200 bg-[#E6FFFF] group-hover:bg-[#ccffff] whitespace-nowrap">
+                                                        <span className={`font-medium text-xs ${item.status === 'Accepted' ? 'text-green-600' :
+                                                            item.status === 'Assigned' ? 'text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-bold' :
+                                                                item.status === 'Request Change' ? 'text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full font-bold' :
+                                                                    'text-gray-600'
+                                                            }`}>
+                                                            {item.status}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-3 py-1.5 border-r border-gray-200 bg-[#F0F0FF] group-hover:bg-[#e0e0ff] whitespace-nowrap">
+                                                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getStatusBadge(item.task_status)}`}>
+                                                            {item.task_status}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-xs whitespace-nowrap">{item.prev_date}</td>
+                                                    <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-xs truncate" title={item.supervisor}>{item.supervisor}</td>
+                                                    <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-xs font-medium whitespace-nowrap">{item.swo_no}</td>
+                                                    <td className="px-3 py-1.5 border-r border-gray-200 bg-[#FFF5EE] group-hover:bg-[#ffe8d6] text-left text-xs truncate max-w-0" title={item.scope}>{item.scope}</td>
+                                                    <td className="px-3 py-1.5 bg-[#FFF5EE] group-hover:bg-[#ffe8d6]">
+                                                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${parseFloat(item.c1_prog) >= 100 ? 'bg-green-100 text-green-700' : parseFloat(item.c1_prog) > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                            {item.c1_prog}
+                                                        </span>
+                                                    </td>
+                                                    {(user?.role === 'Admin' || user?.role === 'PM') && (
+                                                        <td className="px-3 py-1.5 bg-[#FFF5EE] group-hover:bg-[#ffe8d6]">
+                                                            <button
+                                                                onClick={(e) => handleDeleteSwo(item.id, e)}
+                                                                className="text-red-500 hover:text-red-700 bg-white border border-red-200 hover:bg-red-50 px-2 py-0.5 rounded-md transition-colors text-xs font-semibold"
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        </td>
+                                                    )}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            })()}
         </div>
     );
 };
@@ -657,7 +691,7 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
             desc: a.description || 'Unknown',
             total: Number(a.qty_total) || 1,
             prev_total: cumulative[a.id] || 0,
-            today: 0
+            today: ''
         }));
     };
 
@@ -667,7 +701,7 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
         const cumulative = computeCumulativePrevTotals();
         return (swo?.activities || []).map((a: any) => {
             const savedAct = savedActs.find((sa: any) => sa.id === a.id);
-            const today = savedAct ? (Number(savedAct.today) || 0) : 0;
+            const today = savedAct ? String(savedAct.today ?? '') : '';
             return { ...a, desc: a.description || 'Unknown', total: Number(a.qty_total) || 1, prev_total: cumulative[a.id] || 0, today };
         });
     };
@@ -724,9 +758,12 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
     const isReadOnly = !isEditable;
 
     // --- Handlers ---
+    // Keep today as string while typing so "0.0", "0.03" don't disappear (parseFloat("0.") => 0 would clear the input)
     const handleActivityChange = (id: string, val: string) => {
-        const today = parseFloat(val) || 0;
-        setActivities(activities.map((a: any) => a.id === id ? { ...a, today } : a));
+        let sanitized = val.replace(/[^\d.]/g, '');
+        const firstDot = sanitized.indexOf('.');
+        if (firstDot >= 0) sanitized = sanitized.slice(0, firstDot + 1) + sanitized.slice(firstDot + 1).replace(/\./g, '');
+        setActivities(activities.map((a: any) => a.id === id ? { ...a, today: sanitized } : a));
     };
 
     const handleSubmit = async () => {
@@ -772,7 +809,7 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
                 work_name: swo.work_name || '',
                 status: 'Pending CM' as const,
                 cm_notes: '',
-                activities,
+                activities: activities.map((a: any) => ({ ...a, today: parseFloat(String(a.today)) || 0 })),
                 equipments,
                 workers,
                 notes,
@@ -928,7 +965,8 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {activities.map((a: any) => {
-                            const upToDate = a.prev_total + a.today;
+                            const todayNum = parseFloat(String(a.today)) || 0;
+                            const upToDate = a.prev_total + todayNum;
                             const percent = ((upToDate / a.total) * 100).toFixed(1);
 
                             return (
@@ -939,9 +977,10 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
                                     <td className="px-6 py-4 bg-blue-50/10">
                                         <div className="flex items-center gap-2">
                                             <input
-                                                type="number"
+                                                type="text"
+                                                inputMode="decimal"
                                                 className={`w-24 p-2 border border-blue-200 rounded outline-none text-right font-medium ${isReadOnly ? 'bg-gray-100/50 cursor-not-allowed text-gray-400' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
-                                                value={a.today || ''}
+                                                value={a.today ?? ''}
                                                 onChange={(e) => handleActivityChange(a.id, e.target.value)}
                                                 placeholder="0.0"
                                                 disabled={isReadOnly}
@@ -1215,7 +1254,7 @@ export const ApprovalDashboard = () => {
     const canDelete = user?.role === 'Admin' || user?.role === 'PM';
 
     return (
-        <div className="flex flex-col lg:flex-row h-auto min-h-[calc(100vh-8rem)] gap-6 pb-12">
+        <div className="flex flex-col lg:flex-row min-h-[calc(100vh-8rem)] lg:h-[calc(100vh-8rem)] gap-4 lg:gap-6 pb-6 lg:pb-12">
             <AlertModal {...approvalModalProps} />
 
             {/* Reject Reason Modal */}
@@ -1260,39 +1299,36 @@ export const ApprovalDashboard = () => {
                 </div>
             )}
 
-            {/* List / Inbox */}
-            <div className="w-full lg:w-1/3 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-64 lg:h-auto shrink-0">
-                <div className="p-4 border-b border-gray-100 bg-gray-50 font-semibold text-gray-800">
+            {/* List / Inbox: 2-line items, full height on desktop, compact on mobile. Desktop: fixed width so Review Pane gets more space */}
+            <div className="w-full max-h-[45vh] lg:max-h-none lg:w-80 lg:flex-shrink-0 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-0">
+                <div className="px-2.5 py-1.5 border-b border-gray-100 bg-gray-50 font-semibold text-gray-800 text-xs shrink-0">
                     Inbox: Pending Approvals
                 </div>
-                <div className="overflow-y-auto flex-1 p-2 space-y-2">
+                <div className="overflow-y-auto flex-1 min-h-0 p-1.5 space-y-1">
                     {reports.map(r => (
                         <div
                             key={r.id}
-                            className={`w-full text-left rounded-lg border transition-all flex items-stretch ${selectedReport === r.id ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-gray-100 hover:border-gray-300 hover:bg-gray-50'}`}
+                            className={`w-full text-left rounded border transition-all flex items-stretch min-h-[2.75rem] ${selectedReport === r.id ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-gray-100 hover:border-gray-300 hover:bg-gray-50'}`}
                         >
-                            {/* Clickable info area */}
                             <button
                                 onClick={() => setSelectedReport(r.id)}
-                                className="flex-1 text-left p-4"
+                                className="flex-1 text-left px-2 py-1.5 min-w-0 flex flex-col justify-center gap-0.5"
                             >
-                                <div className="flex justify-between items-start mb-2">
-                                    <h4 className="font-bold text-gray-800 text-sm">{r.swo}</h4>
-                                    <StatusBadge status={r.status} />
+                                <div className="flex items-center justify-between gap-1.5">
+                                    <span className="font-semibold text-gray-800 text-[11px] truncate">{r.swo}</span>
+                                    <span className="shrink-0"><StatusBadge status={r.status} compact /></span>
                                 </div>
-                                <div className="text-xs text-gray-500 space-y-1">
-                                    <p>Date: {r.date}</p>
-                                    <p>Sup: <span className="font-medium text-gray-700">{r.supervisor}</span></p>
+                                <div className="text-[10px] text-gray-500 leading-tight">
+                                    <span>{r.date}</span> · <span className="font-medium text-gray-600">{r.supervisor}</span>
                                 </div>
                             </button>
-                            {/* Delete button for Admin / PM */}
                             {canDelete && (
                                 <button
                                     onClick={(e) => handleDeleteReport(r.id, e)}
                                     title="Delete report"
-                                    className="px-3 border-l border-gray-200 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors rounded-r-lg"
+                                    className="px-1.5 border-l border-gray-200 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors rounded-r flex items-center shrink-0"
                                 >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                 </button>
                             )}
                         </div>
@@ -1301,7 +1337,7 @@ export const ApprovalDashboard = () => {
             </div>
 
             {/* Review Pane */}
-            <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="flex-1 min-h-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
                 {(() => {
                     const report = reports.find(r => r.id === selectedReport);
                     if (!report) return null;
