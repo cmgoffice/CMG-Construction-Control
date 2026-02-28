@@ -1,6 +1,7 @@
 import React, { useState, ReactNode, useRef, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
-import { ShieldAlert, LogOut, Menu, UserCircle, Briefcase, FileText, BarChart3, Shield, User, Bell } from 'lucide-react';
+import { ShieldAlert, LogOut, Menu, UserCircle, Briefcase, FileText, BarChart3, Shield, User, Bell, BookOpen } from 'lucide-react';
+import { UserManualModal } from './UserManual';
 import { useNotifications, NotificationItem } from './useNotifications';
 
 // Real Auth imports
@@ -171,6 +172,7 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
   const prevCountRef = useRef<number | null>(null);
   const didMountRef = useRef(false);
   const [pendingUserCount, setPendingUserCount] = useState(0);
+  const [manualOpen, setManualOpen] = useState(false);
 
   // Menu navigation logging removed as per requirement
 
@@ -316,6 +318,15 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
 
           <div className="flex items-center gap-3">
 
+            {/* User Manual Button */}
+            <button
+              onClick={() => setManualOpen(true)}
+              className="relative p-2 rounded-full text-gray-500 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+              title="คู่มือการใช้งาน"
+            >
+              <BookOpen className="w-5 h-5" />
+            </button>
+
             {/* Bell Notification */}
             <div ref={bellRef} className="relative">
               <button
@@ -435,6 +446,9 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
             </button>
           </div>
         </header>
+
+        {/* User Manual Modal */}
+        <UserManualModal isOpen={manualOpen} onClose={() => setManualOpen(false)} currentRole={user?.role} />
 
         {/* Task Alert Modal */}
         {taskAlertOpen && notifCount > 0 && (
