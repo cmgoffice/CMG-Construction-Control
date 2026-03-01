@@ -16,8 +16,8 @@ import SWOCreationForm from './SWOCreationForm';
 import { DailyReportManager, ApprovalDashboard } from './DailyReportWorkflow';
 import { SWOCloseWorkflow } from './ClosureWorkflows';
 import ExecutiveDashboards from './ExecutiveDashboards';
-import { collection, onSnapshot, query, doc, updateDoc } from 'firebase/firestore';
-import { db, logActivity } from './firebase';
+import { onSnapshot, query, updateDoc } from 'firebase/firestore';
+import { col, docRef, logActivity } from './firebase';
 
 // Wrapper: reads location.state to auto-edit a specific SWO
 const SWOCreationWrapper: React.FC = () => {
@@ -28,7 +28,7 @@ const SWOCreationWrapper: React.FC = () => {
 
   React.useEffect(() => {
     if (!navTargetId) { setLoaded(true); return; }
-    const unsub = onSnapshot(query(collection(db, 'site_work_orders')), snap => {
+    const unsub = onSnapshot(query(col('site_work_orders')), snap => {
       const found = snap.docs.map(d => ({ id: d.id, ...d.data() })).find(s => s.id === navTargetId);
       if (found) {
         setEditSwo(found);
@@ -177,7 +177,7 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
   useEffect(() => {
     const isAdminRole = user?.role === 'Admin' || (user?.role as string) === 'Administrator';
     if (!isAdminRole) return;
-    const q = query(collection(db, 'users'));
+    const q = query(col('users'));
     const unsub = onSnapshot(q, (snapshot) => {
       let count = 0;
       snapshot.forEach((docSnap) => {
@@ -366,7 +366,7 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
                             item={item}
                             onResubmit={async () => {
                               try {
-                                await updateDoc(doc(db, 'site_work_orders', item.targetId), {
+                                await updateDoc(docRef('site_work_orders', item.targetId), {
                                   closure_status: 'PM Review',
                                   pm_reject_reason: null,
                                   cd_reject_reason: null,
@@ -377,7 +377,7 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
                             }}
                             onCancel={async () => {
                               try {
-                                await updateDoc(doc(db, 'site_work_orders', item.targetId), {
+                                await updateDoc(docRef('site_work_orders', item.targetId), {
                                   closure_status: null,
                                   pm_reject_reason: null,
                                   cd_reject_reason: null,

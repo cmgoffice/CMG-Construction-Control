@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { CheckCircle, XCircle, Clock, Save, Send, AlertTriangle, MessageSquare, FileText } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthRBACRouter';
-import { db, storage, logActivity } from './firebase';
-import { collection, addDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { col, docRef, storage, logActivity } from './firebase';
+import { addDoc, onSnapshot, query, where, updateDoc, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import SWOCreationForm from './SWOCreationForm';
 import { AlertModal, useAlert } from './AlertModal';
@@ -50,22 +50,22 @@ export const DailyReportManager = () => {
     const [dailyReports, setDailyReports] = useState<any[]>([]);
 
     React.useEffect(() => {
-        const q1 = query(collection(db, "site_work_orders"));
+        const q1 = query(col("site_work_orders"));
         const unsub1 = onSnapshot(q1, (snapshot) => setSwos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
 
-        const q2 = query(collection(db, "project_supervisors"));
+        const q2 = query(col("project_supervisors"));
         const unsub2 = onSnapshot(q2, (snapshot) => setSupervisors(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
 
-        const q3 = query(collection(db, "project_equipments"));
+        const q3 = query(col("project_equipments"));
         const unsub3 = onSnapshot(q3, (snapshot) => setEquipmentsList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
 
-        const q4 = query(collection(db, "project_worker_teams"));
+        const q4 = query(col("project_worker_teams"));
         const unsub4 = onSnapshot(q4, (snapshot) => setAllTeamsList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
 
-        const q5 = query(collection(db, "projects"));
+        const q5 = query(col("projects"));
         const unsub5 = onSnapshot(q5, (snapshot) => setProjects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
 
-        const q6 = query(collection(db, "daily_reports"));
+        const q6 = query(col("daily_reports"));
         const unsub6 = onSnapshot(q6, (snapshot) => setDailyReports(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
 
         return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); };
@@ -177,7 +177,7 @@ export const DailyReportManager = () => {
         e.stopPropagation();
         showDelete('ลบ SWO?', 'การลบไม่สามารถย้อนกลับได้', async () => {
             try {
-                await deleteDoc(doc(db, "site_work_orders", swoId));
+                await deleteDoc(docRef("site_work_orders", swoId));
                 showAlert('success', 'ลบสำเร็จ', 'SWO ถูกลบเรียบร้อยแล้ว');
             } catch (error: any) {
                 showAlert('error', 'ลบไม่สำเร็จ', error.message);
@@ -408,7 +408,7 @@ export const SwoAcceptanceView = ({ swo, allEquipments = [], allTeams = [], onBa
     const handleAccept = async () => {
         setIsSubmitting(true);
         try {
-            await updateDoc(doc(db, "site_work_orders", swo.id), { status: 'Accepted' });
+            await updateDoc(docRef("site_work_orders", swo.id), { status: 'Accepted' });
             showAlert('success', 'รับ SWO สำเร็จ', 'คุณสามารถเริ่มส่ง Daily Report ได้แล้ว');
             onActionComplete();
         } catch (e: any) {
@@ -425,7 +425,7 @@ export const SwoAcceptanceView = ({ swo, allEquipments = [], allTeams = [], onBa
 
         setIsSubmitting(true);
         try {
-            await updateDoc(doc(db, "site_work_orders", swo.id), {
+            await updateDoc(docRef("site_work_orders", swo.id), {
                 status: 'Request Change',
                 change_reason: changeReason
             });
@@ -617,7 +617,7 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
     // --- Projects query (to resolve project_no for report data) ---
     const [projects, setProjects] = useState<any[]>([]);
     React.useEffect(() => {
-        const q = query(collection(db, "projects"));
+        const q = query(col("projects"));
         const unsub = onSnapshot(q, (snapshot) => setProjects(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))));
         return unsub;
     }, []);
@@ -635,7 +635,7 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
     React.useEffect(() => {
         setDataLoaded(false);
         const q = query(
-            collection(db, "daily_reports"),
+            col("daily_reports"),
             where("swo_id", "==", swo.id),
             where("date", "==", selectedDate)
         );
@@ -656,7 +656,7 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
     const [allPrevApprovedReports, setAllPrevApprovedReports] = React.useState<any[]>([]);
     React.useEffect(() => {
         const q = query(
-            collection(db, "daily_reports"),
+            col("daily_reports"),
             where("swo_id", "==", swo.id),
             where("status", "==", "Approved")
         );
@@ -817,9 +817,9 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
             };
 
             if (existingReport?.status === 'Rejected') {
-                await updateDoc(doc(db, "daily_reports", existingReport.id), reportData);
+                await updateDoc(docRef("daily_reports", existingReport.id), reportData);
             } else {
-                await addDoc(collection(db, "daily_reports"), reportData);
+                await addDoc(col("daily_reports"), reportData);
             }
             if (user) {
                 await logActivity({
@@ -1134,7 +1134,7 @@ export const ApprovalDashboard = () => {
     const [rejectReason, setRejectReason] = useState('');
 
     React.useEffect(() => {
-        const q = query(collection(db, "daily_reports"));
+        const q = query(col("daily_reports"));
         const unsub = onSnapshot(q, (snapshot) => {
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
@@ -1186,7 +1186,7 @@ export const ApprovalDashboard = () => {
             const updateData: any = { status: nextStatus, cm_notes: cmNotes };
             if (report.status === 'Pending CM') updateData.cm_approved_by = user?.name || user?.role;
             if (nextStatus === 'Approved') updateData.pm_approved_by = user?.name || user?.role;
-            await updateDoc(doc(db, "daily_reports", report.id), updateData);
+            await updateDoc(docRef("daily_reports", report.id), updateData);
             
             // Log daily report approval
             if (user) {
@@ -1217,7 +1217,7 @@ export const ApprovalDashboard = () => {
             return;
         }
         try {
-            await updateDoc(doc(db, "daily_reports", report.id), {
+            await updateDoc(docRef("daily_reports", report.id), {
                 status: 'Rejected',
                 cm_notes: cmNotes,
                 reject_reason: rejectReason.trim()
@@ -1244,7 +1244,7 @@ export const ApprovalDashboard = () => {
         e.stopPropagation();
         showDelete('ลบรายงาน?', 'การลบไม่สามารถย้อนกลับได้', async () => {
             try {
-                await deleteDoc(doc(db, "daily_reports", reportId));
+                await deleteDoc(docRef("daily_reports", reportId));
                 if (selectedReport === reportId) setSelectedReport(null);
                 showAlert('success', 'ลบสำเร็จ', 'ลบรายงานเรียบร้อยแล้ว');
             } catch (e: any) { showAlert('error', 'ลบไม่สำเร็จ', (e as any).message); }

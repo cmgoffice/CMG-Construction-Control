@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, query } from 'firebase/firestore';
-import { db } from './firebase';
+import { onSnapshot, query } from 'firebase/firestore';
+import { col } from './firebase';
 
 export type NotificationType = 'assigned' | 'rejected' | 'pending_cm' | 'pending_pm' | 'change_request' | 'closure_review' | 'closure_rejected';
 
@@ -39,11 +39,11 @@ export const useNotifications = (user: {
     useEffect(() => {
         if (!user?.role) return;
 
-        const unsub1 = onSnapshot(query(collection(db, 'site_work_orders')), snap => {
+        const unsub1 = onSnapshot(query(col('site_work_orders')), snap => {
             setSwos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        const unsub2 = onSnapshot(query(collection(db, 'daily_reports')), snap => {
+        const unsub2 = onSnapshot(query(col('daily_reports')), snap => {
             setReports(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 

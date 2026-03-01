@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ข้อมูลแอปทั้งหมดอยู่ใต้ ConstructionControlData/root/...
+    // อัปเดต Rules ใน Firebase Console ให้ path นี้ใช้กฎเดียวกับที่เคยใช้กับ collection เก่า
+    match /ConstructionControlData/root/{collection}/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    // ถ้าเดิมมีกฎเฉพาะตาม role หรือ path ย่อย ให้ copy มาใส่ใน block ด้านบนแล้วปรับ path
+  }
+}

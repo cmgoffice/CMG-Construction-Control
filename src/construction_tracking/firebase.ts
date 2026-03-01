@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, addDoc, collection as fsCollection } from "firebase/firestore";
+import { getFirestore, addDoc, collection, doc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 
@@ -18,6 +18,20 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
+/** Base path: ConstructionControlData/root (all app data lives under this) */
+export const COL_ROOT = "ConstructionControlData" as const;
+export const ROOT_DOC = "root" as const;
+
+/** Collection reference under ConstructionControlData/root/{name} */
+export function col(name: string) {
+    return collection(db, COL_ROOT, ROOT_DOC, name);
+}
+
+/** Document reference under ConstructionControlData/root/{collectionName}/{docId} */
+export function docRef(collectionName: string, docId: string) {
+    return doc(db, COL_ROOT, ROOT_DOC, collectionName, docId);
+}
+
 export const logActivity = async (params: {
     uid: string;
     name: string;
@@ -27,10 +41,10 @@ export const logActivity = async (params: {
     detail?: string;
 }) => {
     try {
-        await addDoc(fsCollection(db, "activity_logs"), {
+        await addDoc(col("activity_logs"), {
             ...params,
             timestamp: new Date().toISOString(),
-            date: new Date().toISOString().split('T')[0],
+            date: new Date().toISOString().split("T")[0],
         });
     } catch {
         // Silent fail — logging should never break the app

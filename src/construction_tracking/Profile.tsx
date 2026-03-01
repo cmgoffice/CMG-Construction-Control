@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuthContext } from './AuthContext';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { updateDoc } from 'firebase/firestore';
+import { docRef } from './firebase';
 import { User, KeyRound, Save } from 'lucide-react';
 
 export const Profile = () => {
@@ -18,7 +18,7 @@ export const Profile = () => {
         setSaving(true);
         try {
             if (currentUser) {
-                await updateDoc(doc(db, 'users', currentUser.uid), {
+                await updateDoc(docRef('users', currentUser.uid), {
                     firstName,
                     lastName,
                     position

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Save, Send, HardHat, FileText, Wrench, Users, Download, Upload, FileSpreadsheet, X } from 'lucide-react';
-import { db, logActivity } from './firebase';
-import { collection, onSnapshot, query, addDoc, doc, updateDoc, getDocs, where, deleteDoc } from 'firebase/firestore';
+import { col, docRef, logActivity } from './firebase';
+import { onSnapshot, query, addDoc, updateDoc, getDocs, where, deleteDoc } from 'firebase/firestore';
 import { useAuth } from './AuthRBACRouter';
 import { AlertModal, useAlert } from './AlertModal';
 
@@ -17,32 +17,32 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
     const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
 
     useEffect(() => {
-        const qProjects = query(collection(db, "projects"));
+        const qProjects = query(col("projects"));
         const unsubProjects = onSnapshot(qProjects, (snapshot) => {
             setRealProjects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (err) => console.error(err));
 
-        const qSupervisors = query(collection(db, "project_supervisors"));
+        const qSupervisors = query(col("project_supervisors"));
         const unsubSupervisors = onSnapshot(qSupervisors, (snapshot) => {
             setRealSupervisors(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
 
-        const qEqm = query(collection(db, "project_equipments"));
+        const qEqm = query(col("project_equipments"));
         const unsubEqm = onSnapshot(qEqm, (snapshot) => {
             setRealEquipments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
 
-        const qTeams = query(collection(db, "project_worker_teams"));
+        const qTeams = query(col("project_worker_teams"));
         const unsubTeams = onSnapshot(qTeams, (snapshot) => {
             setRealTeams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
 
-        const qSwos = query(collection(db, "site_work_orders"));
+        const qSwos = query(col("site_work_orders"));
         const unsubSwos = onSnapshot(qSwos, (snapshot) => {
             setRealSwos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
 
-        const qDrafts = query(collection(db, "site_work_orders"), where("status", "==", "Draft"));
+        const qDrafts = query(col("site_work_orders"), where("status", "==", "Draft"));
         const unsubDrafts = onSnapshot(qDrafts, (snapshot) => {
             const all = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             // Filter by user's accessible projects
@@ -196,7 +196,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                 updated_at: new Date().toISOString()
             };
             if (editingDraftId) {
-                await updateDoc(doc(db, "site_work_orders", editingDraftId), payload);
+                await updateDoc(docRef("site_work_orders", editingDraftId), payload);
                 if (user) {
                     await logActivity({
                         uid: user.uid,
@@ -209,7 +209,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                 }
                 showAlert('success', 'บันทึก Draft แล้ว', `อัปเดต Draft ${formData.swo_no} เรียบร้อยแล้ว`);
             } else {
-                await addDoc(collection(db, "site_work_orders"), { ...payload, created_at: new Date().toISOString() });
+                await addDoc(col("site_work_orders"), { ...payload, created_at: new Date().toISOString() });
                 if (user) {
                     await logActivity({
                         uid: user.uid,
@@ -231,7 +231,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
     const handleDeleteDraft = (draftId: string, swoNo: string) => {
         showDelete(`ลบ Draft ${swoNo}?`, 'Draft นี้จะถูกลบถาวร ไม่สามารถย้อนกลับได้', async () => {
             try {
-                await deleteDoc(doc(db, "site_work_orders", draftId));
+                await deleteDoc(docRef("site_work_orders", draftId));
                 if (editingDraftId === draftId) clearDraftEditing();
                 showAlert('success', 'ลบสำเร็จ', `Draft ${swoNo} ถูกลบแล้ว`);
             } catch (err: any) {
@@ -261,7 +261,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                         suffix = parts[1];
                     }
 
-                    const q = query(collection(db, "site_work_orders"), where("project_id", "==", formData.project_id));
+                    const q = query(col("site_work_orders"), where("project_id", "==", formData.project_id));
                     const querySnapshot = await getDocs(q);
                     let maxSeq = 0;
                     querySnapshot.forEach(docSnap => {
@@ -295,12 +295,12 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
             };
 
             if (editSwo) {
-                await updateDoc(doc(db, "site_work_orders", editSwo.id), payload);
+                await updateDoc(docRef("site_work_orders", editSwo.id), payload);
                 showAlert('success', 'อัปเดตสำเร็จ', `SWO ${finalSwoNo} ได้รับการอัปเดตเรียบร้อยแล้ว`);
                 if (onCancelEdit) onCancelEdit();
             } else if (editingDraftId) {
                 // Promote draft to real SWO
-                await updateDoc(doc(db, "site_work_orders", editingDraftId), { ...payload, swo_no: finalSwoNo });
+                await updateDoc(docRef("site_work_orders", editingDraftId), { ...payload, swo_no: finalSwoNo });
                 if (user) {
                     await logActivity({
                         uid: user.uid,
@@ -314,7 +314,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                 showAlert('success', 'Assign SWO สำเร็จ', `SWO ${finalSwoNo} ถูกสร้างจาก Draft และ Assign เรียบร้อยแล้ว`);
                 clearDraftEditing();
             } else {
-                await addDoc(collection(db, "site_work_orders"), {
+                await addDoc(col("site_work_orders"), {
                     ...payload,
                     created_at: new Date().toISOString()
                 });

@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { useAuth } from './AuthRBACRouter';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { TrendingUp, Users, Clock, ShieldCheck, Activity } from 'lucide-react';
-import { db } from './firebase';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { col } from './firebase';
+import { onSnapshot, query } from 'firebase/firestore';
 
 // --- Mock Data ---
 
@@ -44,12 +44,12 @@ export default function ExecutiveDashboards() {
     const [supervisors, setSupervisors] = useState<any[]>([]);
 
     React.useEffect(() => {
-        const qProjects = query(collection(db, "projects"));
+        const qProjects = query(col("projects"));
         const unsubProjects = onSnapshot(qProjects, (snapshot) => {
             setProjects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
 
-        const qSuperv = query(collection(db, "project_supervisors"));
+        const qSuperv = query(col("project_supervisors"));
         const unsubSuperv = onSnapshot(qSuperv, (snapshot) => {
             setSupervisors(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });

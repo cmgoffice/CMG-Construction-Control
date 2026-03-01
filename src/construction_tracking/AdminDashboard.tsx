@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 
-import { db, logActivity } from './firebase';
+import { col, docRef, logActivity } from './firebase';
 
-import { collection, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
+import { onSnapshot, updateDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
 
 import { useAuthContext, AppUser, Role, Status } from './AuthContext';
 
@@ -45,7 +45,7 @@ export const AdminDashboard = () => {
 
 
 
-        const qUsers = query(collection(db, 'users'));
+        const qUsers = query(col('users'));
 
         const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
 
@@ -63,7 +63,7 @@ export const AdminDashboard = () => {
 
 
 
-        const qProjects = query(collection(db, 'projects'));
+        const qProjects = query(col('projects'));
 
         const unsubscribeProjects = onSnapshot(qProjects, (snapshot) => {
 
@@ -116,7 +116,7 @@ export const AdminDashboard = () => {
         try {
             const userToApprove = users.find(u => u.uid === userId);
 
-            await updateDoc(doc(db, 'users', userId), { status: 'Approved' });
+            await updateDoc(docRef('users', userId), { status: 'Approved' });
 
             // Log user approval
             if (appUser && userToApprove) {
@@ -151,7 +151,7 @@ export const AdminDashboard = () => {
             try {
                 const userToReject = users.find(u => u.uid === userId);
 
-                await updateDoc(doc(db, 'users', userId), { status: 'Rejected' });
+                await updateDoc(docRef('users', userId), { status: 'Rejected' });
 
                 // Log user rejection
                 if (appUser && userToReject) {
@@ -183,7 +183,7 @@ export const AdminDashboard = () => {
 
         try {
 
-            await updateDoc(doc(db, 'users', userId), { role: newRole });
+            await updateDoc(docRef('users', userId), { role: newRole });
 
         } catch (error) {
 
@@ -201,7 +201,7 @@ export const AdminDashboard = () => {
 
         try {
 
-            await updateDoc(doc(db, 'users', userId), { status: newStatus });
+            await updateDoc(docRef('users', userId), { status: newStatus });
 
         } catch (error) {
 
@@ -239,7 +239,7 @@ export const AdminDashboard = () => {
 
         try {
 
-            await updateDoc(doc(db, 'users', userId), {
+            await updateDoc(docRef('users', userId), {
 
                 firstName: editForm.firstName,
 
@@ -281,7 +281,7 @@ export const AdminDashboard = () => {
 
             try {
 
-                await deleteDoc(doc(db, 'users', userId));
+                await deleteDoc(docRef('users', userId));
 
                 showAlert('success', 'ลบสำเร็จ', `ลบผู้ใช้ "${name}" เรียบร้อยแล้ว`);
 
@@ -353,7 +353,7 @@ export const AdminDashboard = () => {
     // Fetch activity logs
     useEffect(() => {
         if (activeTab !== 'logs') return;
-        const q = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(500));
+        const q = query(col('activity_logs'), orderBy('timestamp', 'desc'), limit(500));
         const unsub = onSnapshot(q, (snap) => {
             setActivityLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthRBACRouter';
 import { FileCheck, CheckCircle2, X, Eye, Check, AlertCircle, XCircle, Clock, ChevronRight, ShieldAlert, Trash2, RefreshCw } from 'lucide-react';
-import { db, logActivity } from './firebase';
-import { collection, onSnapshot, query, doc, updateDoc, where, deleteDoc } from 'firebase/firestore';
+import { col, docRef, logActivity } from './firebase';
+import { onSnapshot, query, updateDoc, where, deleteDoc } from 'firebase/firestore';
 import { AlertModal, useAlert } from './AlertModal';
 
 // --- Daily Report View Modal (Review Report style: C1/C2/C3/Attachments) ---
@@ -309,7 +309,7 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onPmAccept, onPmReject, 
 
     useEffect(() => {
         if (isOpen && swoData?.id) {
-            const q = query(collection(db, "daily_reports"), where("swo_id", "==", swoData.id));
+            const q = query(col("daily_reports"), where("swo_id", "==", swoData.id));
             const unsub = onSnapshot(q, (snapshot) => {
                 const fetched = snapshot.docs.map(d => ({ id: d.id, ...d.data() as any }));
                 fetched.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -607,7 +607,7 @@ export const SWOCloseWorkflow = () => {
     // Resolve supervisor Firestore doc ID by email
     useEffect(() => {
         if (user?.role !== 'Supervisor') return;
-        const unsub = onSnapshot(query(collection(db, "project_supervisors")), (snap) => {
+        const unsub = onSnapshot(query(col("project_supervisors")), (snap) => {
             const found = snap.docs.find(d => d.data().email === user.email);
             setSupervisorDocId(found ? found.id : null);
         });
@@ -616,14 +616,14 @@ export const SWOCloseWorkflow = () => {
 
     // Fetch projects for projectNo lookup
     useEffect(() => {
-        const unsub = onSnapshot(query(collection(db, "projects")), snap => {
+        const unsub = onSnapshot(query(col("projects")), snap => {
             setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
         return unsub;
     }, []);
 
     useEffect(() => {
-        const unsub = onSnapshot(query(collection(db, "site_work_orders")), (snapshot) => {
+        const unsub = onSnapshot(query(col("site_work_orders")), (snapshot) => {
             const fetched = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
 
             const visible = fetched.filter((swo: any) => {
@@ -678,7 +678,7 @@ export const SWOCloseWorkflow = () => {
     const handlePmAccept = async (note: string, quality: string, onTime: string | null, delay: string) => {
         if (!selectedSwoForModal) return;
         try {
-            await updateDoc(doc(db, "site_work_orders", selectedSwoForModal.id), {
+            await updateDoc(docRef("site_work_orders", selectedSwoForModal.id), {
                 closure_status: 'CD Review',
                 pm_closure_note: note,
                 quality_score: quality,
@@ -708,7 +708,7 @@ export const SWOCloseWorkflow = () => {
     const handlePmReject = async (reason: string) => {
         if (!selectedSwoForModal) return;
         try {
-            await updateDoc(doc(db, "site_work_orders", selectedSwoForModal.id), {
+            await updateDoc(docRef("site_work_orders", selectedSwoForModal.id), {
                 closure_status: null,
                 pm_reject_reason: reason,
             });
@@ -730,7 +730,7 @@ export const SWOCloseWorkflow = () => {
     const handleCdAccept = async (note: string) => {
         if (!selectedSwoForModal) return;
         try {
-            await updateDoc(doc(db, "site_work_orders", selectedSwoForModal.id), {
+            await updateDoc(docRef("site_work_orders", selectedSwoForModal.id), {
                 closure_status: 'MD Review',
                 cd_closure_note: note,
                 md_reject_reason: null,
@@ -756,7 +756,7 @@ export const SWOCloseWorkflow = () => {
     const handleCdReject = async (note: string, reason: string) => {
         if (!selectedSwoForModal) return;
         try {
-            await updateDoc(doc(db, "site_work_orders", selectedSwoForModal.id), {
+            await updateDoc(docRef("site_work_orders", selectedSwoForModal.id), {
                 closure_status: 'PM Review',
                 cd_closure_note: note,
                 cd_reject_reason: reason,
@@ -779,7 +779,7 @@ export const SWOCloseWorkflow = () => {
     const handleMdAccept = async () => {
         if (!selectedSwoForModal) return;
         try {
-            await updateDoc(doc(db, "site_work_orders", selectedSwoForModal.id), {
+            await updateDoc(docRef("site_work_orders", selectedSwoForModal.id), {
                 closure_status: 'Closed SWO',
             });
             
@@ -803,7 +803,7 @@ export const SWOCloseWorkflow = () => {
     const handleMdReject = async (reason: string) => {
         if (!selectedSwoForModal) return;
         try {
-            await updateDoc(doc(db, "site_work_orders", selectedSwoForModal.id), {
+            await updateDoc(docRef("site_work_orders", selectedSwoForModal.id), {
                 closure_status: 'PM Review',
                 md_reject_reason: reason,
             });
@@ -825,7 +825,7 @@ export const SWOCloseWorkflow = () => {
     const handleSupervisorSubmitRequest = async () => {
         if (!selectedSwoToRequest) return;
         try {
-            await updateDoc(doc(db, "site_work_orders", selectedSwoToRequest), {
+            await updateDoc(docRef("site_work_orders", selectedSwoToRequest), {
                 closure_status: 'PM Review',
                 pm_reject_reason: null,
                 cd_reject_reason: null,
@@ -846,7 +846,7 @@ export const SWOCloseWorkflow = () => {
     const handleResubmitRejectedSwo = async () => {
         if (!rejectedSwoData) return;
         try {
-            await updateDoc(doc(db, "site_work_orders", rejectedSwoData.id), {
+            await updateDoc(docRef("site_work_orders", rejectedSwoData.id), {
                 closure_status: 'PM Review',
                 pm_reject_reason: null,
                 cd_reject_reason: null,
@@ -864,7 +864,7 @@ export const SWOCloseWorkflow = () => {
     const handleCancelRejectedSwo = async () => {
         if (!rejectedSwoData) return;
         try {
-            await updateDoc(doc(db, "site_work_orders", rejectedSwoData.id), {
+            await updateDoc(docRef("site_work_orders", rejectedSwoData.id), {
                 closure_status: null,
                 pm_reject_reason: null,
                 cd_reject_reason: null,
@@ -883,7 +883,7 @@ export const SWOCloseWorkflow = () => {
     const handleAdminDelete = async () => {
         if (!deleteTargetId) return;
         try {
-            await deleteDoc(doc(db, "site_work_orders", deleteTargetId));
+            await deleteDoc(docRef("site_work_orders", deleteTargetId));
             setDeleteTargetId(null);
             showAlert('success', 'ลบแล้ว', `ลบ SWO ${deleteTargetNo} เรียบร้อยแล้ว`);
         } catch (e: any) {
@@ -894,7 +894,7 @@ export const SWOCloseWorkflow = () => {
     // Supervisor: cancel closure request
     const handleCancelRequest = async (swoId: string) => {
         try {
-            await updateDoc(doc(db, "site_work_orders", swoId), { closure_status: null });
+            await updateDoc(docRef("site_work_orders", swoId), { closure_status: null });
             showAlert('info', 'ยกเลิกแล้ว', 'ยกเลิกคำขอปิด SWO เรียบร้อยแล้ว');
         } catch (e) { console.error(e); }
     };

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthRBACRouter';
-import { db, logActivity } from './firebase';
-import { collection, addDoc, onSnapshot, query, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { col, docRef, logActivity } from './firebase';
+import { addDoc, onSnapshot, query, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Plus, Search, Building2, Users, Wrench, HardHat, ShieldCheck, X, Download, Upload, FileSpreadsheet } from 'lucide-react';
 import { AlertModal, useAlert } from './AlertModal';
 
@@ -83,27 +83,27 @@ export default function ProjectDashboard() {
     });
 
     useEffect(() => {
-        const q1 = query(collection(db, "projects"));
+        const q1 = query(col("projects"));
         const unsub1 = onSnapshot(q1, (snapshot) => {
             setRealProjects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (err) => console.error(err));
 
-        const q2 = query(collection(db, "project_supervisors"));
+        const q2 = query(col("project_supervisors"));
         const unsub2 = onSnapshot(q2, (snapshot) => {
             setRealSupervisors(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (err) => console.error(err));
 
-        const q3 = query(collection(db, "project_equipments"));
+        const q3 = query(col("project_equipments"));
         const unsub3 = onSnapshot(q3, (snapshot) => {
             setRealEquipments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (err) => console.error(err));
 
-        const q4 = query(collection(db, "project_worker_teams"));
+        const q4 = query(col("project_worker_teams"));
         const unsub4 = onSnapshot(q4, (snapshot) => {
             setRealWorkerTeams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (err) => console.error(err));
 
-        const q5 = query(collection(db, "users"));
+        const q5 = query(col("users"));
         const unsub5 = onSnapshot(q5, (snapshot) => {
             setUsersList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (err) => console.error(err));
@@ -137,7 +137,7 @@ export default function ProjectDashboard() {
         setIsSaving(true);
         try {
             if (editingProjectId) {
-                await updateDoc(doc(db, "projects", editingProjectId), {
+                await updateDoc(docRef("projects", editingProjectId), {
                     ...formData,
                 });
                 // Log project update
@@ -151,7 +151,7 @@ export default function ProjectDashboard() {
                 });
                 showAlert('success', 'อัปเดตสำเร็จ', 'Project ได้รับการอัปเดตเรียบร้อยแล้ว');
             } else {
-                await addDoc(collection(db, "projects"), {
+                await addDoc(col("projects"), {
                     ...formData,
                     status: 'ACTIVE',
                     created_at: new Date()
@@ -192,7 +192,7 @@ export default function ProjectDashboard() {
     const handleDelete = (project: any) => {
         showDelete(`ลบ Project: ${project.name}?`, 'การลบไม่สามารถย้อนกลับได้', async () => {
             try {
-                await deleteDoc(doc(db, "projects", project.id));
+                await deleteDoc(docRef("projects", project.id));
                 showAlert('success', 'ลบสำเร็จ', 'Project ถูกลบเรียบร้อยแล้ว');
             } catch (e: any) {
                 showAlert('error', 'ลบไม่สำเร็จ', e.message);
@@ -215,10 +215,10 @@ export default function ProjectDashboard() {
         setIsSaving(true);
         try {
             if (editingA2Id) {
-                await updateDoc(doc(db, "project_supervisors", editingA2Id), { ...a2FormData });
+                await updateDoc(docRef("project_supervisors", editingA2Id), { ...a2FormData });
                 showAlert('success', 'อัปเดตสำเร็จ', 'ข้อมูล Supervisor ได้รับการอัปเดตแล้ว');
             } else {
-                await addDoc(collection(db, "project_supervisors"), {
+                await addDoc(col("project_supervisors"), {
                     ...a2FormData, created_at: new Date()
                 });
                 showAlert('success', 'เพิ่มสำเร็จ', 'เพิ่ม Supervisor เรียบร้อยแล้ว');
@@ -240,7 +240,7 @@ export default function ProjectDashboard() {
 
     const handleDeleteA2 = (sup: any) => {
         showDelete(`ลบ Supervisor: ${sup.name}?`, 'การลบไม่สามารถย้อนกลับได้', async () => {
-            try { await deleteDoc(doc(db, "project_supervisors", sup.id)); }
+            try { await deleteDoc(docRef("project_supervisors", sup.id)); }
             catch (e: any) { showAlert('error', 'ลบไม่สำเร็จ', e.message); }
         });
     };
@@ -261,10 +261,10 @@ export default function ProjectDashboard() {
         setIsSaving(true);
         try {
             if (editingA3Id) {
-                await updateDoc(doc(db, "project_equipments", editingA3Id), { ...a3FormData });
+                await updateDoc(docRef("project_equipments", editingA3Id), { ...a3FormData });
                 showAlert('success', 'อัปเดตสำเร็จ', 'ข้อมูล Equipment ได้รับการอัปเดตแล้ว');
             } else {
-                await addDoc(collection(db, "project_equipments"), {
+                await addDoc(col("project_equipments"), {
                     ...a3FormData, created_at: new Date()
                 });
                 showAlert('success', 'เพิ่มสำเร็จ', 'เพิ่ม Equipment เรียบร้อยแล้ว');
@@ -286,7 +286,7 @@ export default function ProjectDashboard() {
 
     const handleDeleteA3 = (eqm: any) => {
         showDelete(`ลบ Equipment: ${eqm.eqm_name}?`, 'การลบไม่สามารถย้อนกลับได้', async () => {
-            try { await deleteDoc(doc(db, "project_equipments", eqm.id)); }
+            try { await deleteDoc(docRef("project_equipments", eqm.id)); }
             catch (e: any) { showAlert('error', 'ลบไม่สำเร็จ', e.message); }
         });
     };
@@ -307,11 +307,11 @@ export default function ProjectDashboard() {
         try {
             if (editingA4Id) {
                 const finalData = { ...a4FormData, total_workers: Number(a4FormData.male_count) + Number(a4FormData.female_count) };
-                await updateDoc(doc(db, "project_worker_teams", editingA4Id), finalData);
+                await updateDoc(docRef("project_worker_teams", editingA4Id), finalData);
                 showAlert('success', 'อัปเดตสำเร็จ', 'ข้อมูล Worker Team ได้รับการอัปเดตแล้ว');
             } else {
                 const finalData = { ...a4FormData, total_workers: Number(a4FormData.male_count) + Number(a4FormData.female_count) };
-                await addDoc(collection(db, "project_worker_teams"), {
+                await addDoc(col("project_worker_teams"), {
                     ...finalData, created_at: new Date()
                 });
                 showAlert('success', 'เพิ่มสำเร็จ', 'เพิ่ม Worker Team เรียบร้อยแล้ว');
@@ -333,7 +333,7 @@ export default function ProjectDashboard() {
 
     const handleDeleteA4 = (team: any) => {
         showDelete(`ลบ Worker Team: ${team.name}?`, 'การลบไม่สามารถย้อนกลับได้', async () => {
-            try { await deleteDoc(doc(db, "project_worker_teams", team.id)); }
+            try { await deleteDoc(docRef("project_worker_teams", team.id)); }
             catch (e: any) { showAlert('error', 'ลบไม่สำเร็จ', e.message); }
         });
     };

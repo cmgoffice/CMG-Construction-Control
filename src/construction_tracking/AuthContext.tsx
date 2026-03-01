@@ -11,8 +11,8 @@ import {
     setPersistence,
     browserSessionPersistence
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, getDocs, collection, query, limit, onSnapshot } from 'firebase/firestore';
-import { auth, db, logActivity } from './firebase';
+import { getDoc, setDoc, getDocs, query, limit, onSnapshot } from 'firebase/firestore';
+import { auth, col, docRef, logActivity } from './firebase';
 
 export type Role = 'Admin' | 'MD' | 'GM' | 'CD' | 'PCM' | 'HRM' | 'PM' | 'CM' | 'Supervisor' | 'Staff' | 'HR' | 'Procurement' | 'Site Admin';
 export type Status = 'Pending' | 'Approved' | 'Rejected';
@@ -69,7 +69,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 return;
             }
             // Subscribe to current user's document so when Admin updates role/assigned_projects, it takes effect immediately without refresh
-            const userDocRef = doc(db, 'users', user.uid);
+            const userDocRef = docRef('users', user.uid);
             unsubscribeSnapshot = onSnapshot(
                 userDocRef,
                 (snap) => {
@@ -99,7 +99,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const user = userCredential.user;
 
         // Check if users collection is empty
-        const usersRef = collection(db, 'users');
+        const usersRef = col('users');
         const q = query(usersRef, limit(1));
         const snapshot = await getDocs(q);
 
@@ -123,7 +123,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
 
         // Save into Firestore
-        await setDoc(doc(db, 'users', user.uid), newUserProfile);
+        await setDoc(docRef('users', user.uid), newUserProfile);
 
         // Sign out so user must login after approval
         await signOut(auth);
@@ -135,7 +135,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const user = userCredential.user;
 
         // Fetch from Firestore
-        const userDocRef = doc(db, 'users', user.uid);
+        const userDocRef = docRef('users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
 
         if (userDocSnap.exists()) {
@@ -167,7 +167,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const result = await signInWithPopup(auth, googleProvider);
         const user = result.user;
 
-        const userDocRef = doc(db, 'users', user.uid);
+        const userDocRef = docRef('users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
 
         if (userDocSnap.exists()) {
@@ -188,7 +188,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             await logActivity({ uid: user.uid, name: `${userData.firstName} ${userData.lastName}`, role: userData.role, action: 'Login', detail: 'Google login' });
         } else {
             // First time Google login — check if first user ever
-            const usersRef = collection(db, 'users');
+            const usersRef = col('users');
             const q = query(usersRef, limit(1));
             const snapshot = await getDocs(q);
 
@@ -213,7 +213,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 assigned_projects: []
             };
 
-            await setDoc(doc(db, 'users', user.uid), newUserProfile);
+            await setDoc(docRef('users', user.uid), newUserProfile);
 
             if (initialStatus === 'Pending') {
                 await signOut(auth);
