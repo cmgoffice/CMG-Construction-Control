@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { onSnapshot, query } from 'firebase/firestore';
 import { col } from './firebase';
 
-export type NotificationType = 'assigned' | 'rejected' | 'pending_cm' | 'pending_pm' | 'change_request' | 'closure_review' | 'closure_rejected';
+export type NotificationType = 'assigned' | 'rejected' | 'pending_cm' | 'pending_pm' | 'change_request' | 'swo_change_request' | 'closure_review' | 'closure_rejected';
 
 export interface NotificationItem {
     id: string;
@@ -35,6 +35,7 @@ export const useNotifications = (user: {
 } | null): NotificationState => {
     const [swos, setSwos] = useState<any[]>([]);
     const [reports, setReports] = useState<any[]>([]);
+    const [changeRequests, setChangeRequests] = useState<any[]>([]);
 
     useEffect(() => {
         if (!user?.role) return;
@@ -47,7 +48,11 @@ export const useNotifications = (user: {
             setReports(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        return () => { unsub1(); unsub2(); };
+        const unsub3 = onSnapshot(query(col('swo_change_requests')), snap => {
+            setChangeRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+
+        return () => { unsub1(); unsub2(); unsub3(); };
     }, [user?.role, user?.uid, JSON.stringify(user?.assigned_projects ?? [])]);
 
     if (!user?.role) return { count: 0, items: [] };
@@ -163,6 +168,19 @@ export const useNotifications = (user: {
             step: 'ขอแก้ไข',
             targetId: s.id
         }));
+
+        // C1/C2/C3 Change Requests: Pending CM (จาก Daily Report ขอแก้ไขปริมาณ)
+        const changeReqPendingCM = changeRequests.filter((r: any) =>
+            r.status === 'Pending CM' && reportInScope({ project_id: r.project_id })
+        );
+        changeReqPendingCM.forEach((r: any) => items.push({
+            id: `swo-change-req-cm-${r.id}`,
+            label: `คำขอแก้ไข C1/C2/C3 — ${r.swo_no || ''} (${r.work_name || ''})`,
+            path: '/approvals',
+            type: 'swo_change_request',
+            step: 'Pending CM — ส่งต่อ PM',
+            targetId: r.id
+        }));
     }
 
     // --- PM: SWOs waiting for closure review ---
@@ -261,6 +279,19 @@ export const useNotifications = (user: {
             step: 'ขอแก้ไข',
             targetId: s.id
         }));
+
+        // C1/C2/C3 Change Requests: Pending PM (อนุมัติและแก้ไขปริมาณ)
+        const changeReqPendingPM = changeRequests.filter((r: any) =>
+            r.status === 'Pending PM' && reportInScope({ project_id: r.project_id })
+        );
+        changeReqPendingPM.forEach((r: any) => items.push({
+            id: `swo-change-req-pm-${r.id}`,
+            label: `คำขอแก้ไข C1/C2/C3 — ${r.swo_no || ''} (${r.work_name || ''})`,
+            path: '/approvals',
+            type: 'swo_change_request',
+            step: 'Pending PM — อนุมัติและแก้ไข',
+            targetId: r.id
+        }));
     }
 
     // --- Admin: all pending approvals + change requests + closure reviews ---
@@ -293,6 +324,17 @@ export const useNotifications = (user: {
             type: 'change_request',
             step: 'ขอแก้ไข',
             targetId: s.id
+        }));
+
+        // C1/C2/C3 Change Requests: ทั้ง Pending CM และ Pending PM
+        const changeReqAll = changeRequests.filter((r: any) => r.status === 'Pending CM' || r.status === 'Pending PM');
+        changeReqAll.forEach((r: any) => items.push({
+            id: `swo-change-req-admin-${r.id}`,
+            label: `คำขอแก้ไข C1/C2/C3 — ${r.swo_no || ''} (${r.work_name || ''})`,
+            path: '/approvals',
+            type: 'swo_change_request',
+            step: r.status === 'Pending PM' ? 'Pending PM' : 'Pending CM',
+            targetId: r.id
         }));
 
         // Admin can see all closure reviews

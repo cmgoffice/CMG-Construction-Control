@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle, XCircle, Clock, Save, Send, AlertTriangle, MessageSquare, FileText } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Save, Send, AlertTriangle, MessageSquare, FileText, Edit3 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthRBACRouter';
 import { col, docRef, storage, logActivity } from './firebase';
@@ -139,6 +139,7 @@ export const DailyReportManager = () => {
             project_id_raw: swo.project_id,
             project_no: projectNo,
             status: swo.status || 'Active',
+            closure_status: swo.closure_status || null,
             task_status: taskStatus,
             prev_date: prevDate,
             supervisor: supervisorName,
@@ -198,7 +199,7 @@ export const DailyReportManager = () => {
     };
 
     if (selectedSwo) {
-        if (selectedSwo.status === 'Assigned' && user?.role === 'Supervisor') {
+        if (selectedSwo.status === 'Assigned' && user?.role === 'Supervisor' && !selectedSwo.pending_change_acceptance) {
             return <SwoAcceptanceView
                 swo={selectedSwo}
                 allEquipments={equipmentsList}
@@ -240,6 +241,7 @@ export const DailyReportManager = () => {
         return <DailyReportForm
             onBack={() => setSelectedSwo(null)}
             swo={selectedSwo}
+            onSwoAccepted={() => setSelectedSwo((prev: any) => prev ? { ...prev, status: 'Accepted', pending_change_acceptance: false } : null)}
             allEquipments={equipmentsList}
             allTeams={allTeamsList}
             initialDate={selectedDateFilter || undefined}
@@ -329,10 +331,57 @@ export const DailyReportManager = () => {
                             if (!rows || rows.length === 0) return null;
                             return (
                                 <div key={projectNo} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                                    <div className="px-3 py-1.5 bg-[#CCE5FF] border-b border-gray-200 font-semibold text-gray-800 text-xs">
+                                    <div className="px-3 py-1.5 bg-[#CCE5FF] border-b border-gray-200 font-semibold text-gray-800 text-[10px] md:text-xs">
                                         โครงการ: {projectNo} <span className="text-gray-500 font-normal ml-2">({rows.length} รายการ)</span>
                                     </div>
-                                    <table className="w-full text-sm text-center table-fixed">
+
+                                    {/* Mobile: card list */}
+                                    <div className="md:hidden divide-y divide-gray-100">
+                                        {rows.map(item => (
+                                            <div
+                                                key={item.id}
+                                                onClick={() => setSelectedSwo(swos.find(s => s.id === item.id))}
+                                                className="p-3 active:bg-gray-50 transition-colors cursor-pointer"
+                                            >
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-[10px] text-gray-500">Project No. / SWO no.</p>
+                                                        <p className="text-xs font-medium text-gray-900 truncate">{item.project_no} · {item.swo_no}</p>
+                                                        <p className="text-[10px] text-gray-500 mt-1">Work Name/Scope</p>
+                                                        <p className="text-xs text-gray-800 truncate">{item.scope}</p>
+                                                    </div>
+                                                    <span className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-bold ${parseFloat(item.c1_prog) >= 100 ? 'bg-green-100 text-green-700' : parseFloat(item.c1_prog) > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                        {item.c1_prog}
+                                                    </span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${item.closure_status ? 'text-red-700 bg-red-50' : item.status === 'Accepted' ? 'text-green-600 bg-green-50' : item.status === 'Assigned' ? 'text-blue-600 bg-blue-50' : item.status === 'Request Change' ? 'text-orange-600 bg-orange-50' : 'text-gray-600 bg-gray-100'}`}>
+                                                        {item.closure_status ? `Closed - ${item.closure_status}` : item.status}
+                                                    </span>
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${getStatusBadge(item.task_status)}`}>{item.task_status}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between mt-1.5 text-[10px] text-gray-500">
+                                                    <span>รายงานล่าสุด: {item.prev_date}</span>
+                                                    <span className="truncate max-w-[45%]" title={item.supervisor}>{item.supervisor}</span>
+                                                </div>
+                                                {(user?.role === 'Admin' || user?.role === 'PM') && (
+                                                    <div className="mt-2 pt-2 border-t border-gray-100">
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => { e.stopPropagation(); handleDeleteSwo(item.id, e); }}
+                                                            className="text-red-500 hover:text-red-700 text-[10px] font-semibold"
+                                                        >
+                                                            ลบ SWO
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Desktop: table */}
+                                    <div className="hidden md:block overflow-x-auto">
+                                    <table className="w-full text-sm text-center table-fixed min-w-[700px]">
                                         <thead className="text-gray-800 border-b border-gray-300">
                                             <tr>
                                                 <th className="px-3 py-1.5 text-xs font-semibold bg-[#CCE5FF] border-r border-gray-300 w-[10%]">Project No.</th>
@@ -352,13 +401,20 @@ export const DailyReportManager = () => {
                                             {rows.map(item => (
                                                 <tr key={item.id} onClick={() => setSelectedSwo(swos.find(s => s.id === item.id))} className="hover:bg-gray-100 transition-colors cursor-pointer group">
                                                     <td className="px-3 py-1.5 border-r border-gray-200 bg-[#E6F2FF] group-hover:bg-[#cce6ff] text-xs font-medium truncate" title={item.project_no}>{item.project_no}</td>
-                                                    <td className="px-3 py-1.5 border-r border-gray-200 bg-[#E6FFFF] group-hover:bg-[#ccffff] whitespace-nowrap">
-                                                        <span className={`font-medium text-xs ${item.status === 'Accepted' ? 'text-green-600' :
-                                                            item.status === 'Assigned' ? 'text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-bold' :
-                                                                item.status === 'Request Change' ? 'text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full font-bold' :
-                                                                    'text-gray-600'
+                                                    <td className="px-2 py-1 border-r border-gray-200 bg-[#E6FFFF] group-hover:bg-[#ccffff] align-top min-w-0">
+                                                        <span className={`inline-block font-medium text-[10px] leading-tight px-1.5 py-0.5 rounded ${item.closure_status
+                                                            ? 'text-red-700 bg-red-50'
+                                                            : item.status === 'Accepted' ? 'text-green-600' :
+                                                                item.status === 'Assigned' ? 'text-blue-600 bg-blue-50' :
+                                                                    item.status === 'Request Change' ? 'text-orange-600 bg-orange-50' :
+                                                                        'text-gray-600'
                                                             }`}>
-                                                            {item.status}
+                                                            {item.closure_status ? (
+                                                                <>
+                                                                    <span className="block font-bold">Closed</span>
+                                                                    <span className="block truncate" title={item.closure_status}>{item.closure_status}</span>
+                                                                </>
+                                                            ) : item.status}
                                                         </span>
                                                     </td>
                                                     <td className="px-3 py-1.5 border-r border-gray-200 bg-[#F0F0FF] group-hover:bg-[#e0e0ff] whitespace-nowrap">
@@ -389,6 +445,7 @@ export const DailyReportManager = () => {
                                             ))}
                                         </tbody>
                                     </table>
+                                    </div>
                                 </div>
                             );
                         })}
@@ -590,8 +647,61 @@ export const SwoAcceptanceView = ({ swo, allEquipments = [], allTeams = [], onBa
     );
 };
 
+// --- Supervisor: Accept PM's quantity/scope change (after PM approved change request) ---
+export const SwoChangeAcceptanceView = ({ swo, onBack, onActionComplete }: { swo: any, onBack: () => void, onActionComplete: () => void }) => {
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const { showAlert, modalProps } = useAlert();
+
+    const handleAcceptChange = async () => {
+        setIsSubmitting(true);
+        try {
+            await updateDoc(docRef("site_work_orders", swo.id), { status: 'Accepted', pending_change_acceptance: false });
+            showAlert('success', 'ยอมรับการแก้ไขแล้ว', 'คุณสามารถส่ง Daily Report ได้ตามปกติ');
+            onActionComplete();
+        } catch (e: any) {
+            showAlert('error', 'เกิดข้อผิดพลาด', e.message);
+        }
+        setIsSubmitting(false);
+    };
+
+    return (
+        <div className="max-w-4xl mx-auto space-y-6 pb-12">
+            <AlertModal {...modalProps} />
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                <button onClick={onBack} className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors shrink-0">
+                    <span className="sr-only">Back</span>
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                </button>
+                <div className="flex-1">
+                    <h1 className="text-2xl font-bold text-gray-900">ยอมรับการแก้ไขปริมาณงาน</h1>
+                    <p className="text-gray-500 mt-1">SWO: <span className="font-semibold text-gray-700">{swo.swo_no} - {swo.work_name}</span></p>
+                </div>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-6">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-5 flex gap-4 items-start">
+                    <Edit3 className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                        <h3 className="text-lg font-bold text-amber-900">มีการแก้ไขปริมาณงาน (C1/C2/C3)</h3>
+                        <p className="text-amber-800 mt-1">PM ได้อนุมัติคำขอแก้ไขและอัปเดตปริมาณงาน/ราคาแล้ว กรุณายอมรับการแก้ไขเพื่อส่ง Daily Report ได้ตามปกติ</p>
+                    </div>
+                </div>
+                <div className="flex justify-end pt-4">
+                    <button
+                        onClick={handleAcceptChange}
+                        disabled={isSubmitting}
+                        className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                        <CheckCircle className="w-5 h-5" />
+                        ยอมรับการแก้ไข
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- Supervisor's Daily Report Form ---
-export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = [], initialDate }: { onBack?: () => void, swo: any, allEquipments?: any[], allTeams?: any[], initialDate?: string }) => {
+export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = [], allTeams = [], initialDate }: { onBack?: () => void, swo: any, onSwoAccepted?: () => void, allEquipments?: any[], allTeams?: any[], initialDate?: string }) => {
     const { user } = useAuth();
     const { showAlert, modalProps: formModalProps } = useAlert();
 
@@ -601,6 +711,11 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
         `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
     const todayStr = toLocalDateStr(new Date());
+    const yesterdayStr = (() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        return toLocalDateStr(d);
+    })();
     const [selectedDate, setSelectedDate] = useState(initialDate || todayStr);
 
     const goToPrevDay = () => {
@@ -612,6 +727,23 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
         const d = new Date(selectedDate + 'T00:00:00');
         d.setDate(d.getDate() + 1);
         setSelectedDate(toLocalDateStr(d));
+    };
+
+    // Next: only up to today. Prev: allowed so Supervisor can open rejected reports on past dates.
+    const canGoPrevDay = true;
+    const canGoNextDay = selectedDate < todayStr;
+
+    // Rejected report: editable for 2 days from rejected_at (Supervisor only)
+    const isRejectedWithinTwoDays = (report: any): boolean => {
+        const at = report?.rejected_at;
+        if (!at) return false;
+        const rejectedDate = new Date(String(at).slice(0, 10) + 'T00:00:00');
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        rejectedDate.setHours(0, 0, 0, 0);
+        const diffMs = today.getTime() - rejectedDate.getTime();
+        const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+        return diffDays >= 0 && diffDays <= 2;
     };
 
     // --- Projects query (to resolve project_no for report data) ---
@@ -725,6 +857,109 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
     const [notes, setNotes] = useState('');
     const [files, setFiles] = useState<FileList | null>(null);
     const [uploading, setUploading] = useState(false);
+    const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
+    const [pendingChangeRequest, setPendingChangeRequest] = useState<any | null>(null);
+    const [requestingChange, setRequestingChange] = useState(false);
+    const [requestChangeModalOpen, setRequestChangeModalOpen] = useState(false);
+    const [requestChangeSelected, setRequestChangeSelected] = useState<{ c1: string[]; c2: string[]; c3: string[] }>({ c1: [], c2: [], c3: [] });
+    const [requestChangeReason, setRequestChangeReason] = useState('');
+
+    // Listen for pending change request on this SWO (Supervisor: hide "Request change" if one exists)
+    React.useEffect(() => {
+        if (user?.role !== 'Supervisor' || !swo?.id) return;
+        const q = query(col("swo_change_requests"), where("swo_id", "==", swo.id));
+        const unsub = onSnapshot(q, (snapshot) => {
+            const pending = snapshot.docs.find(d => {
+                const s = (d.data() as any).status;
+                return s === 'Pending CM' || s === 'Pending PM';
+            });
+            setPendingChangeRequest(pending ? { id: pending.id, ...pending.data() } : null);
+        });
+        return unsub;
+    }, [user?.role, swo?.id]);
+
+    const openRequestChangeModal = () => {
+        setRequestChangeSelected({ c1: [], c2: [], c3: [] });
+        setRequestChangeReason('');
+        setRequestChangeModalOpen(true);
+    };
+
+    const toggleRequestItem = (section: 'c1' | 'c2' | 'c3', id: string) => {
+        setRequestChangeSelected(prev => {
+            const arr = prev[section];
+            const next = arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id];
+            return { ...prev, [section]: next };
+        });
+    };
+
+    const handleRequestChange = async () => {
+        const hasAny = requestChangeSelected.c1.length > 0 || requestChangeSelected.c2.length > 0 || requestChangeSelected.c3.length > 0;
+        if (!swo || requestingChange) return;
+        if (!hasAny) {
+            showAlert('warning', 'กรุณาเลือกรายการ', 'กรุณาเลือกอย่างน้อย 1 รายการ (C1/C2/C3) ที่ต้องการขอแก้ไข');
+            return;
+        }
+        setRequestingChange(true);
+        try {
+            const draftActivities = (swo.activities || []).map((a: any) => ({
+                id: a.id,
+                description: a.description,
+                unit: a.unit,
+                qty_total: a.qty_total,
+                rate: a.rate ?? ''
+            }));
+            const draftEquipmentList = (swo.equipmentList || []).map((e: any) => ({ id: e.id, equipment_id: e.equipment_id }));
+            const draftTeamList = (swo.teamList || []).map((t: any) => ({ id: t.id, team_id: t.team_id }));
+            await addDoc(col("swo_change_requests"), {
+                swo_id: swo.id,
+                swo_no: swo.swo_no,
+                project_id: swo.project_id,
+                work_name: swo.work_name,
+                requested_by_uid: user?.uid,
+                requested_by_name: user?.name,
+                requested_at: new Date().toISOString(),
+                status: 'Pending CM',
+                reason: requestChangeReason.trim(),
+                requested_c1_ids: requestChangeSelected.c1,
+                requested_c2_ids: requestChangeSelected.c2,
+                requested_c3_ids: requestChangeSelected.c3,
+                draft_activities: draftActivities,
+                draft_equipmentList: draftEquipmentList,
+                draft_teamList: draftTeamList,
+                effective_date: null,
+                approved_by_pm_at: null,
+                approved_by_pm_name: null
+            });
+            if (user) {
+                await logActivity({
+                    uid: user.uid,
+                    name: user.name,
+                    role: user.role,
+                    action: 'Request',
+                    menu: 'Daily Report',
+                    detail: `Request change C1/C2/C3 for SWO ${swo.swo_no}`
+                });
+            }
+            setRequestChangeModalOpen(false);
+            showAlert('success', 'ส่งคำขอแก้ไขแล้ว', 'คำขอแก้ไขถูกส่งไปยัง CM และ PM แล้ว');
+        } catch (e: any) {
+            showAlert('error', 'เกิดข้อผิดพลาด', e.message);
+        }
+        setRequestingChange(false);
+    };
+
+    const handleAcceptChange = async () => {
+        if (!swo?.id) return;
+        setRequestingChange(true);
+        try {
+            await updateDoc(docRef("site_work_orders", swo.id), { status: 'Accepted', pending_change_acceptance: false });
+            showAlert('success', 'ยอมรับการแก้ไขแล้ว', 'คุณสามารถกรอกและส่งรายงานของวันนี้ได้');
+            onSwoAccepted?.();
+        } catch (e: any) {
+            showAlert('error', 'เกิดข้อผิดพลาด', e.message);
+        }
+        setRequestingChange(false);
+    };
 
     // Load data into form once queries settle
     React.useEffect(() => {
@@ -749,12 +984,20 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
     const isLockedByStatus = reportStatus === 'Approved' || reportStatus === 'Pending CM' || reportStatus === 'Pending PM';
 
     // Admin: locked only when already Approved (cannot re-edit approved)
-    // Supervisor: editable only on today + not locked by status
-    // Others: always read-only
+    // Supervisor: (1) Closed SWO → cannot edit; (2) Pending change acceptance → cannot submit until accept; (3) Rejected → within 2 days; (4) else → today/yesterday
+    const supervisorEditable =
+        (swo?.closure_status)
+            ? false
+            : (swo?.pending_change_acceptance)
+                ? false
+                : reportStatus === 'Rejected'
+                    ? isRejectedWithinTwoDays(existingReport)
+                    : (selectedDate === todayStr || selectedDate === yesterdayStr) && !isLockedByStatus;
     const isEditable =
-        user?.role === 'Admin' ? !isLockedByStatus
-            : user?.role === 'Supervisor' ? (selectedDate === todayStr && !isLockedByStatus)
-                : false;
+        (swo?.closure_status) ? false
+            : user?.role === 'Admin' ? !isLockedByStatus
+                : user?.role === 'Supervisor' ? supervisorEditable
+                    : false;
     const isReadOnly = !isEditable;
 
     // --- Handlers ---
@@ -798,7 +1041,7 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
 
         // Save report to Firestore
         try {
-            const reportData = {
+            const reportData: any = {
                 date: selectedDate,
                 swo_id: swo.id,
                 swo: swo.swo_no,
@@ -815,6 +1058,9 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
                 notes,
                 attachments: attachmentUrls
             };
+            if (existingReport?.status === 'Rejected') {
+                reportData.rejected_at = null;
+            }
 
             if (existingReport?.status === 'Rejected') {
                 await updateDoc(docRef("daily_reports", existingReport.id), reportData);
@@ -850,6 +1096,23 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
     return (
         <div className="max-w-4xl mx-auto space-y-6 pb-12">
             <AlertModal {...formModalProps} />
+
+            {/* Lightbox: click thumbnail to open full image */}
+            {lightboxImage && (
+                <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80"
+                    onClick={() => setLightboxImage(null)}
+                >
+                    <button type="button" className="absolute top-4 right-4 text-white hover:text-gray-200 text-2xl font-bold z-10" onClick={() => setLightboxImage(null)} aria-label="ปิด">×</button>
+                    <img
+                        src={lightboxImage.url}
+                        alt={lightboxImage.name}
+                        className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                    <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-sm bg-black/50 px-3 py-1 rounded truncate max-w-[90vw]">{lightboxImage.name}</p>
+                </div>
+            )}
             <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                 <div className="flex items-center gap-4">
                     {onBack && (
@@ -861,6 +1124,9 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">Daily Progress Report</h1>
                         <p className="text-gray-500 mt-1">SWO: <span className="font-semibold text-gray-700">{swo?.swo_no} - {swo?.work_name}</span></p>
+                        <p className={`mt-2 text-lg font-bold ${swo?.closure_status ? 'text-red-700 bg-red-50 px-3 py-1.5 rounded-lg inline-block' : 'text-gray-700'}`}>
+                            SWO Status: {swo?.closure_status ? `Closed - ${swo.closure_status}` : (swo?.status || 'Active')}
+                        </p>
                         <div className="flex flex-col sm:flex-row gap-4 mt-2">
                             <div className="flex items-center gap-2 text-gray-600">
                                 <span className="font-medium">Start Date:</span>
@@ -882,16 +1148,18 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
                     <div className="flex items-center justify-end gap-2">
                         <button
                             onClick={goToPrevDay}
+                            disabled={!canGoPrevDay}
                             title="Previous Day"
-                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
+                            className={`p-1.5 rounded-lg transition-colors ${canGoPrevDay ? 'bg-gray-100 hover:bg-gray-200 text-gray-600' : 'bg-gray-50 text-gray-300 cursor-not-allowed'}`}
                         >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                         </button>
                         <p className="text-lg font-bold text-gray-800 min-w-[110px] text-center">{selectedDate}</p>
                         <button
                             onClick={goToNextDay}
+                            disabled={!canGoNextDay}
                             title="Next Day"
-                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
+                            className={`p-1.5 rounded-lg transition-colors ${canGoNextDay ? 'bg-gray-100 hover:bg-gray-200 text-gray-600' : 'bg-gray-50 text-gray-300 cursor-not-allowed'}`}
                         >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                         </button>
@@ -903,17 +1171,126 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
                     {isLockedByStatus && (reportStatus === 'Pending CM' || reportStatus === 'Pending PM') && (
                         <p className="text-xs text-yellow-600 mt-1 font-medium">⏳ รอการอนุมัติ</p>
                     )}
-                    {reportStatus === 'Rejected' && !isLockedByStatus && (
-                        <p className="text-xs text-red-500 mt-1 font-medium">⚠️ ถูก Reject – กรุณาแก้ไขและส่งใหม่</p>
+                    {reportStatus === 'Rejected' && isEditable && (
+                        <p className="text-xs text-red-500 mt-1 font-medium">⚠️ ถูก Reject – แก้ไขและส่งใหม่ได้ภายใน 2 วัน</p>
                     )}
-                    {selectedDate !== todayStr && user?.role === 'Supervisor' && reportStatus === 'none' && (
-                        <p className="text-xs text-orange-500 mt-1 font-medium">📅 ดูข้อมูลย้อนหลัง (Read Only)</p>
+                    {reportStatus === 'Rejected' && !isEditable && existingReport?.rejected_at && (
+                        <p className="text-xs text-red-600 mt-1 font-medium">⏱️ หมดเวลาการแก้ไข (2 วันนับจากวันถูก Reject)</p>
                     )}
-                    {user?.role !== 'Admin' && user?.role !== 'Supervisor' && (
+                    {user?.role === 'Supervisor' && reportStatus === 'none' && selectedDate < yesterdayStr && (
+                        <p className="text-xs text-orange-500 mt-1 font-medium">📅 ส่งรายงานได้เฉพาะวันนี้และเมื่อวาน</p>
+                    )}
+                    {user?.role === 'Supervisor' && reportStatus === 'none' && selectedDate === yesterdayStr && (
+                        <p className="text-xs text-blue-600 mt-1 font-medium">📅 รายงานเมื่อวาน – สามารถส่งได้</p>
+                    )}
+                    {user?.role === 'Supervisor' && reportStatus === 'none' && selectedDate < yesterdayStr && (
+                        <p className="text-xs text-gray-500 mt-1 font-medium">📅 ดูข้อมูลย้อนหลัง (ส่งรายงานได้เฉพาะวันนี้และเมื่อวาน)</p>
+                    )}
+                    {swo?.closure_status && (
+                        <p className="text-xs text-red-600 mt-1 font-medium">🔒 SWO ปิดแล้ว – ดูได้อย่างเดียว (กรอกข้อมูลไม่ได้)</p>
+                    )}
+                    {user?.role !== 'Admin' && user?.role !== 'Supervisor' && !swo?.closure_status && (
                         <p className="text-xs text-red-500 mt-1 font-medium">🔒 View Only</p>
                     )}
                 </div>
             </div>
+
+            {/* Supervisor: PM แก้ไขแล้ว — แถบแบน: มีคำขอรอ = แสดงเฉพาะ badge รอ CM/PM (ซ่อนปุ่มขอแก้ไขอีกครั้งและปุ่มยอมรับ); ไม่มีคำขอรอ = แสดงปุ่มขอแก้ไขอีกครั้ง + ยอมรับ */}
+            {user?.role === 'Supervisor' && swo?.pending_change_acceptance && (
+                <div className="bg-amber-50/90 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <Edit3 className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span className="text-amber-800 text-sm font-medium truncate">ขอแก้ไขปริมาณงาน (C1/C2/C3) คำขอจะส่งไปยัง CM – PM</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        {pendingChangeRequest ? (
+                            <span className="text-xs font-medium text-amber-700 bg-amber-100 border border-amber-200 px-2 py-1 rounded">รอ CM/PM ({pendingChangeRequest.status})</span>
+                        ) : (
+                            <>
+                                <button type="button" onClick={openRequestChangeModal} disabled={requestingChange} className="px-3 py-1.5 text-amber-700 border border-amber-300 rounded-lg text-sm font-medium bg-white hover:bg-amber-100 cursor-pointer disabled:opacity-50">ขอแก้ไขอีกครั้ง</button>
+                                <button type="button" onClick={handleAcceptChange} disabled={requestingChange} className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold cursor-pointer disabled:opacity-50">ยอมรับ</button>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Supervisor: แถบเล็กแบน — ขอแก้ไขปริมาณงาน (เมื่อ SWO เป็น Accepted และยังไม่มีคำขอรอ) */}
+            {user?.role === 'Supervisor' && swo?.status === 'Accepted' && !swo?.pending_change_acceptance && (
+                <div className="bg-amber-50/80 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <Edit3 className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span className="text-amber-800 text-sm font-medium truncate">ขอแก้ไขปริมาณงาน (C1/C2/C3)</span>
+                        <span className="text-amber-600 text-xs hidden sm:inline">คำขอจะส่งไปยัง CM → PM</span>
+                    </div>
+                    {pendingChangeRequest ? (
+                        <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-1 rounded shrink-0">รอ CM/PM ({pendingChangeRequest.status})</span>
+                    ) : (
+                        <button type="button" onClick={openRequestChangeModal} disabled={requestingChange} className="shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg flex items-center gap-1">
+                            <Edit3 className="w-3.5 h-3.5" /> ขอแก้ไข
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {/* Modal: เลือกรายการที่จะขอแก้ไข + เหตุผล */}
+            {requestChangeModalOpen && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/40">
+                    <div className="bg-white rounded-xl shadow-2xl border border-amber-200 w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="px-4 py-3 border-b bg-amber-50 font-semibold text-amber-900 text-sm">เลือกรายการที่ต้องการขอแก้ไขปริมาณ + ใส่เหตุผล</div>
+                        <div className="p-4 overflow-y-auto flex-1 space-y-4">
+                            <div>
+                                <p className="text-xs font-semibold text-gray-600 mb-2">C1 งาน (Work Activities)</p>
+                                <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                                    {(swo?.activities || []).map((a: any) => (
+                                        <label key={a.id} className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={requestChangeSelected.c1.includes(a.id)} onChange={() => toggleRequestItem('c1', a.id)} className="rounded border-amber-300" />
+                                            <span className="text-sm text-gray-800">{a.description || '-'} ({a.qty_total} {a.unit})</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold text-gray-600 mb-2">C2 เครื่องจักร (Equipment)</p>
+                                <div className="space-y-1.5 max-h-24 overflow-y-auto">
+                                    {(swo?.equipmentList || []).map((e: any) => {
+                                        const name = allEquipments.find((eq: any) => eq.id === e.equipment_id)?.eqm_name || e.equipment_id || '-';
+                                        return (
+                                            <label key={e.id} className="flex items-center gap-2 cursor-pointer">
+                                                <input type="checkbox" checked={requestChangeSelected.c2.includes(e.id)} onChange={() => toggleRequestItem('c2', e.id)} className="rounded border-amber-300" />
+                                                <span className="text-sm text-gray-800">{name}</span>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold text-gray-600 mb-2">C3 ทีมงาน (Worker teams)</p>
+                                <div className="space-y-1.5 max-h-24 overflow-y-auto">
+                                    {(swo?.teamList || []).map((t: any) => {
+                                        const team = allTeams.find((tm: any) => tm.id === t.team_id);
+                                        const name = team ? `${team.name}${team.leader_name ? ' / ' + team.leader_name : ''}` : t.team_id || '-';
+                                        return (
+                                            <label key={t.id} className="flex items-center gap-2 cursor-pointer">
+                                                <input type="checkbox" checked={requestChangeSelected.c3.includes(t.id)} onChange={() => toggleRequestItem('c3', t.id)} className="rounded border-amber-300" />
+                                                <span className="text-sm text-gray-800">{name}</span>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">เหตุผล (ถ้ามี)</label>
+                                <textarea className="w-full p-2 border border-gray-300 rounded-lg text-sm resize-none" rows={3} placeholder="ระบุเหตุผลที่ขอแก้ไข..." value={requestChangeReason} onChange={e => setRequestChangeReason(e.target.value)} />
+                            </div>
+                        </div>
+                        <div className="px-4 py-3 border-t flex justify-end gap-2">
+                            <button type="button" onClick={() => setRequestChangeModalOpen(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50">ยกเลิก</button>
+                            <button type="button" onClick={handleRequestChange} disabled={requestingChange} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50">ส่งคำขอแก้ไข</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Status Banner */}
             {reportStatus === 'Approved' && (
@@ -942,7 +1319,54 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
                         {existingReport?.reject_reason ? (
                             <p className="text-sm text-red-700 mt-1 font-medium">เหตุผล: {existingReport.reject_reason}</p>
                         ) : null}
-                        <p className="text-xs text-red-500 mt-1">กรุณาแก้ไขข้อมูลแล้วกด Resubmit เพื่อส่งขออนุมัติอีกครั้ง</p>
+                        {isEditable ? (
+                            <p className="text-xs text-red-600 mt-1">คุณมีเวลา 2 วัน (นับจากวันถูก Reject) ในการแก้ไขและกด Resubmit เพื่อส่งขออนุมัติอีกครั้ง</p>
+                        ) : (
+                            <p className="text-xs text-red-500 mt-1">หมดเวลาการแก้ไขแล้ว (เกิน 2 วันนับจากวันถูก Reject)</p>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Review Notes from CM/PM - Show when report has been reviewed */}
+            {existingReport && (existingReport.cm_notes || existingReport.cm_approved_by || existingReport.pm_approved_by) && (
+                <div className="bg-purple-50 border border-purple-200 rounded-xl overflow-hidden">
+                    <div className="px-4 py-2 bg-purple-100 border-b border-purple-200 flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-purple-600" />
+                        <span className="font-semibold text-purple-800 text-sm">Review Notes from CM/PM</span>
+                    </div>
+                    <div className="p-4 space-y-3">
+                        {/* CM Review */}
+                        {(existingReport.cm_approved_by || existingReport.cm_notes) && (
+                            <div className="bg-white rounded-lg p-3 border border-purple-100">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded">CM</span>
+                                    {existingReport.cm_approved_by && (
+                                        <span className="text-xs text-gray-500">Reviewed by: <span className="font-medium text-gray-700">{existingReport.cm_approved_by}</span></span>
+                                    )}
+                                </div>
+                                {existingReport.cm_notes ? (
+                                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{existingReport.cm_notes}</p>
+                                ) : (
+                                    <p className="text-xs text-gray-400 italic">No notes added</p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* PM Review */}
+                        {existingReport.pm_approved_by && (
+                            <div className="bg-white rounded-lg p-3 border border-purple-100">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded">PM</span>
+                                    <span className="text-xs text-gray-500">Final Approval by: <span className="font-medium text-gray-700">{existingReport.pm_approved_by}</span></span>
+                                </div>
+                                {existingReport.pm_notes ? (
+                                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{existingReport.pm_notes}</p>
+                                ) : (
+                                    <p className="text-xs text-gray-400 italic">No notes added</p>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -1082,21 +1506,47 @@ export const DailyReportForm = ({ onBack, swo, allEquipments = [], allTeams = []
                                     </span>
                                 )}
                             </div>
-                            {/* Existing attachments */}
+                            {/* Existing attachments: Site Photos & Attachments grid with thumbnails */}
                             {(existingReport?.attachments || []).length > 0 && (
-                                <div className="mt-3 space-y-1">
-                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Uploaded Attachments</p>
-                                    {(existingReport.attachments as { name: string; url: string; type: string }[]).map((att, i) => (
-                                        <a
-                                            key={i}
-                                            href={att.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800 hover:underline"
-                                        >
-                                            {att.type?.startsWith('image/') ? '🖼️' : '📎'} {att.name}
-                                        </a>
-                                    ))}
+                                <div className="mt-4 rounded-xl border border-gray-200 overflow-hidden">
+                                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 font-semibold text-gray-800 text-sm flex items-center gap-2">
+                                        📎 Site Photos & Attachments
+                                        <span className="ml-1 bg-gray-200 text-gray-600 text-xs font-bold px-2 py-0.5 rounded-full">
+                                            {(existingReport.attachments as { name: string; url: string; type: string }[]).length}
+                                        </span>
+                                    </div>
+                                    <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[320px] overflow-y-auto">
+                                        {(existingReport.attachments as { name: string; url: string; type: string }[]).map((att, i) =>
+                                            att.type?.startsWith('image/') ? (
+                                                <button
+                                                    key={i}
+                                                    type="button"
+                                                    onClick={() => setLightboxImage({ url: att.url, name: att.name })}
+                                                    className="block w-full text-left rounded-lg overflow-hidden border border-gray-200 bg-white hover:border-indigo-400 hover:shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
+                                                >
+                                                    <div className="aspect-[4/3] bg-gray-100 overflow-hidden">
+                                                        <img
+                                                            src={att.url}
+                                                            alt={att.name}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    </div>
+                                                    <p className="px-3 py-1.5 text-xs text-gray-500 truncate bg-white border-t border-gray-100">{att.name}</p>
+                                                </button>
+                                            ) : (
+                                                <a
+                                                    key={i}
+                                                    href={att.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors"
+                                                >
+                                                    <span className="text-2xl">📄</span>
+                                                    <span className="text-sm text-indigo-700 font-medium truncate hover:underline">{att.name}</span>
+                                                </a>
+                                            )
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -1133,6 +1583,53 @@ export const ApprovalDashboard = () => {
     const [rejectModal, setRejectModal] = useState<{ open: boolean; report: any | null }>({ open: false, report: null });
     const [rejectReason, setRejectReason] = useState('');
 
+    // Tab state: "pending" or "approved"
+    const [activeTab, setActiveTab] = useState<'pending' | 'approved'>('pending');
+
+    // Inbox section: Daily Reports vs Change Requests (C1/C2/C3)
+    const [inboxSection, setInboxSection] = useState<'reports' | 'changes'>('reports');
+    const [changeRequests, setChangeRequests] = useState<any[]>([]);
+    const [selectedChangeId, setSelectedChangeId] = useState<string | null>(null);
+    const [changeEditModal, setChangeEditModal] = useState<{ open: boolean; req: any | null }>({ open: false, req: null });
+    const [changeEditDraft, setChangeEditDraft] = useState<{ activities: any[]; equipmentList: any[]; teamList: any[] } | null>(null);
+
+    React.useEffect(() => {
+        const q = query(col("swo_change_requests"));
+        const unsub = onSnapshot(q, (snapshot) => {
+            const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const filtered = (user?.role === 'Admin' || user?.role === 'MD')
+                ? fetched
+                : fetched.filter((r: any) => (user as any)?.assigned_projects?.includes(r.project_id));
+            setChangeRequests(filtered);
+        });
+        return unsub;
+    }, [user?.role, user?.uid]);
+
+    const pendingChangeRequests = changeRequests.filter((r: any) => r.status === 'Pending CM' || r.status === 'Pending PM');
+    const selectedChangeRequest = changeRequests.find(r => r.id === selectedChangeId);
+
+    React.useEffect(() => {
+        if (inboxSection === 'changes' && pendingChangeRequests.length > 0 && !selectedChangeId) setSelectedChangeId(pendingChangeRequests[0].id);
+        if (inboxSection === 'changes' && selectedChangeId && !pendingChangeRequests.some((r: any) => r.id === selectedChangeId)) setSelectedChangeId(pendingChangeRequests[0]?.id ?? null);
+    }, [inboxSection, pendingChangeRequests, selectedChangeId]);
+
+    // เมื่อคลิกจากการแจ้งเตือน (กระดิ่ง) คำขอแก้ไข C1/C2/C3 → เปิดแท็บ Change Requests และเลือกรายการ
+    const navChangeRequestIdRef = React.useRef<string | null>((location.state as any)?.notifType === 'swo_change_request' ? (location.state as any)?.targetId ?? null : null);
+    React.useEffect(() => {
+        if (navChangeRequestIdRef.current && changeRequests.some((r: any) => r.id === navChangeRequestIdRef.current)) {
+            setInboxSection('changes');
+            setSelectedChangeId(navChangeRequestIdRef.current);
+            navChangeRequestIdRef.current = null;
+            window.history.replaceState({}, '');
+        }
+    }, [changeRequests]);
+
+    // Filter states
+    const [filterDate, setFilterDate] = useState('');
+    const [filterSwo, setFilterSwo] = useState('All');
+    const [filterSupervisor, setFilterSupervisor] = useState('All');
+    const [filterProject, setFilterProject] = useState('All');
+
     React.useEffect(() => {
         const q = query(col("daily_reports"));
         const unsub = onSnapshot(q, (snapshot) => {
@@ -1148,18 +1645,54 @@ export const ApprovalDashboard = () => {
         return unsub;
     }, [user?.role, user?.uid]);
 
+    // Derive unique filter options from reports
+    const uniqueSupervisors = Array.from(new Set(reports.map(r => r.supervisor || r.supervisor_name).filter(Boolean)));
+    const uniqueProjects = Array.from(new Set(reports.map(r => r.project_no).filter(Boolean)));
+    const uniqueSwos = Array.from(new Set(reports.map(r => r.swo).filter(Boolean)));
+
+    // Filter reports based on tab and filters
+    const filteredReports = reports.filter(r => {
+        // Tab filter
+        const isPending = r.status === 'Pending CM' || r.status === 'Pending PM' || r.status === 'Rejected';
+        const isApproved = r.status === 'Approved';
+        if (activeTab === 'pending' && !isPending) return false;
+        if (activeTab === 'approved' && !isApproved) return false;
+
+        // Date filter
+        if (filterDate && r.date !== filterDate) return false;
+
+        // SWO filter
+        if (filterSwo !== 'All' && r.swo !== filterSwo) return false;
+
+        // Supervisor filter
+        if (filterSupervisor !== 'All' && (r.supervisor !== filterSupervisor && r.supervisor_name !== filterSupervisor)) return false;
+
+        // Project filter
+        if (filterProject !== 'All' && r.project_no !== filterProject) return false;
+
+        return true;
+    }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
     // Auto-select: from notification nav state (once on mount), or default to first report
     const navTargetIdRef = React.useRef<string | null>((location.state as any)?.targetId || null);
     React.useEffect(() => {
-        if (reports.length === 0) return;
-        if (navTargetIdRef.current && reports.some(r => r.id === navTargetIdRef.current)) {
+        if (filteredReports.length === 0) {
+            setSelectedReport(null);
+            return;
+        }
+        if (navTargetIdRef.current && filteredReports.some(r => r.id === navTargetIdRef.current)) {
             setSelectedReport(navTargetIdRef.current);
             navTargetIdRef.current = null;
             window.history.replaceState({}, '');
-        } else if (!selectedReport) {
-            setSelectedReport(reports[0].id);
+        } else if (!selectedReport || !filteredReports.some(r => r.id === selectedReport)) {
+            setSelectedReport(filteredReports[0].id);
         }
-    }, [reports]);
+    }, [filteredReports]);
+
+    // Clear notes when selecting a different report
+    React.useEffect(() => {
+        setCmNotes('');
+    }, [selectedReport]);
 
     // Role-based action permissions
     // CM: can approve Pending CM → Pending PM, can reject Pending CM
@@ -1183,9 +1716,18 @@ export const ApprovalDashboard = () => {
     const handleApprove = async (report: any) => {
         try {
             const nextStatus = report.status === 'Pending CM' ? 'Pending PM' : 'Approved';
-            const updateData: any = { status: nextStatus, cm_notes: cmNotes };
-            if (report.status === 'Pending CM') updateData.cm_approved_by = user?.name || user?.role;
-            if (nextStatus === 'Approved') updateData.pm_approved_by = user?.name || user?.role;
+            const updateData: any = { status: nextStatus };
+            
+            // Save notes based on approval stage
+            if (report.status === 'Pending CM') {
+                updateData.cm_notes = cmNotes;
+                updateData.cm_approved_by = user?.name || user?.role;
+            }
+            if (nextStatus === 'Approved') {
+                updateData.pm_notes = cmNotes;
+                updateData.pm_approved_by = user?.name || user?.role;
+            }
+            
             await updateDoc(docRef("daily_reports", report.id), updateData);
             
             // Log daily report approval
@@ -1217,10 +1759,12 @@ export const ApprovalDashboard = () => {
             return;
         }
         try {
+            const rejectedAt = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
             await updateDoc(docRef("daily_reports", report.id), {
                 status: 'Rejected',
                 cm_notes: cmNotes,
-                reject_reason: rejectReason.trim()
+                reject_reason: rejectReason.trim(),
+                rejected_at: rejectedAt
             });
             
             // Log daily report rejection
@@ -1251,7 +1795,70 @@ export const ApprovalDashboard = () => {
         });
     };
 
-    const canDelete = user?.role === 'Admin' || user?.role === 'PM';
+    const canDelete = user?.role === 'Admin';
+
+    // --- Change Request: CM Forward to PM ---
+    const handleChangeRequestForward = async (req: any) => {
+        try {
+            await updateDoc(docRef("swo_change_requests", req.id), { status: 'Pending PM' });
+            if (user) {
+                await logActivity({ uid: user.uid, name: user.name, role: user.role, action: 'Forward', menu: 'Change Request', detail: `Forward change request SWO ${req.swo_no} to PM` });
+            }
+            showAlert('success', 'ส่งต่อ PM แล้ว', 'คำขอแก้ไขถูกส่งไปยัง PM แล้ว');
+        } catch (e: any) { showAlert('error', 'เกิดข้อผิดพลาด', e.message); }
+    };
+
+    // --- Change Request: PM Open Edit Modal ---
+    const openChangeEditModal = (req: any) => {
+        setChangeEditModal({ open: true, req });
+        setChangeEditDraft({
+            activities: (req.draft_activities || []).map((a: any) => ({ ...a, qty_total: a.qty_total ?? '', rate: a.rate ?? '' })),
+            equipmentList: req.draft_equipmentList || [],
+            teamList: req.draft_teamList || []
+        });
+    };
+
+    // --- Change Request: PM Submit (apply draft to SWO, set Assigned + pending_change_acceptance) ---
+    const handleChangeRequestApply = async () => {
+        const req = changeEditModal.req;
+        if (!req || !changeEditDraft) return;
+        try {
+            const effectiveDate = new Date().toISOString().slice(0, 10);
+            await updateDoc(docRef("site_work_orders", req.swo_id), {
+                activities: changeEditDraft.activities.map((a: any) => ({
+                    id: a.id,
+                    description: a.description,
+                    unit: a.unit,
+                    qty_total: Number(a.qty_total) || 0,
+                    rate: a.rate ?? ''
+                })),
+                equipmentList: changeEditDraft.equipmentList,
+                teamList: changeEditDraft.teamList,
+                status: 'Assigned',
+                pending_change_acceptance: true,
+                change_effective_date: effectiveDate,
+                updated_at: new Date().toISOString()
+            });
+            await updateDoc(docRef("swo_change_requests", req.id), {
+                status: 'Approved',
+                effective_date: effectiveDate,
+                approved_by_pm_at: new Date().toISOString(),
+                approved_by_pm_name: user?.name || user?.role,
+                draft_activities: changeEditDraft.activities,
+                draft_equipmentList: changeEditDraft.equipmentList,
+                draft_teamList: changeEditDraft.teamList
+            });
+            if (user) {
+                await logActivity({ uid: user.uid, name: user.name, role: user.role, action: 'Approve', menu: 'Change Request', detail: `Apply change request SWO ${req.swo_no} (effective ${effectiveDate})` });
+            }
+            setChangeEditModal({ open: false, req: null });
+            setChangeEditDraft(null);
+            showAlert('success', 'อนุมัติและอัปเดต SWO แล้ว', 'Supervisor ต้องยอมรับการแก้ไขก่อนจึงส่งรายงานได้');
+        } catch (e: any) { showAlert('error', 'เกิดข้อผิดพลาด', e.message); }
+    };
+
+    const canForwardChangeRequest = (req: any) => (user?.role === 'CM' || user?.role === 'Admin') && req?.status === 'Pending CM';
+    const canApproveChangeRequest = (req: any) => (user?.role === 'PM' || user?.role === 'Admin') && req?.status === 'Pending PM';
 
     return (
         <div className="flex flex-col lg:flex-row min-h-[calc(100vh-8rem)] lg:h-[calc(100vh-8rem)] gap-4 lg:gap-6 pb-6 lg:pb-12">
@@ -1299,48 +1906,250 @@ export const ApprovalDashboard = () => {
                 </div>
             )}
 
-            {/* List / Inbox: 2-line items, full height on desktop, compact on mobile. Desktop: fixed width so Review Pane gets more space */}
-            <div className="w-full max-h-[45vh] lg:max-h-none lg:w-80 lg:flex-shrink-0 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-0">
-                <div className="px-2.5 py-1.5 border-b border-gray-100 bg-gray-50 font-semibold text-gray-800 text-xs shrink-0">
-                    Inbox: Pending Approvals
+            {/* List / Inbox: with tabs and filters */}
+            <div className="w-full max-h-[55vh] lg:max-h-none lg:w-96 lg:flex-shrink-0 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-0">
+                {/* Section: Daily Reports | Change Requests */}
+                <div className="flex border-b border-gray-200 bg-gray-50 shrink-0">
+                    <button
+                        onClick={() => setInboxSection('reports')}
+                        className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors ${inboxSection === 'reports' ? 'text-blue-600 border-b-2 border-blue-600 bg-white' : 'text-gray-500 hover:bg-gray-100'}`}
+                    >
+                        Daily Reports
+                    </button>
+                    <button
+                        onClick={() => setInboxSection('changes')}
+                        className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors ${inboxSection === 'changes' ? 'text-amber-600 border-b-2 border-amber-600 bg-white' : 'text-gray-500 hover:bg-gray-100'}`}
+                    >
+                        Change Requests
+                        <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${inboxSection === 'changes' ? 'bg-amber-100 text-amber-700' : 'bg-gray-200 text-gray-600'}`}>
+                            {pendingChangeRequests.length}
+                        </span>
+                    </button>
                 </div>
-                <div className="overflow-y-auto flex-1 min-h-0 p-1.5 space-y-1">
-                    {reports.map(r => (
-                        <div
-                            key={r.id}
-                            className={`w-full text-left rounded border transition-all flex items-stretch min-h-[2.75rem] ${selectedReport === r.id ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-gray-100 hover:border-gray-300 hover:bg-gray-50'}`}
+
+                {/* Header with Tabs (only for Daily Reports) */}
+                {inboxSection === 'reports' && (
+                <div className="border-b border-gray-100 bg-gray-50 shrink-0">
+                    <div className="px-2.5 py-1.5 font-semibold text-gray-800 text-xs">
+                        Inbox: Daily Reports
+                    </div>
+                    {/* Tabs */}
+                    <div className="flex border-b border-gray-200">
+                        <button
+                            onClick={() => setActiveTab('pending')}
+                            className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors ${activeTab === 'pending'
+                                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
+                                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                                }`}
                         >
-                            <button
-                                onClick={() => setSelectedReport(r.id)}
-                                className="flex-1 text-left px-2 py-1.5 min-w-0 flex flex-col justify-center gap-0.5"
-                            >
-                                <div className="flex items-center justify-between gap-1.5">
-                                    <span className="font-semibold text-gray-800 text-[11px] truncate">{r.swo}</span>
-                                    <span className="shrink-0"><StatusBadge status={r.status} compact /></span>
-                                </div>
-                                <div className="text-[10px] text-gray-500 leading-tight">
-                                    <span>{r.date}</span> · <span className="font-medium text-gray-600">{r.supervisor}</span>
-                                </div>
-                            </button>
-                            {canDelete && (
-                                <button
-                                    onClick={(e) => handleDeleteReport(r.id, e)}
-                                    title="Delete report"
-                                    className="px-1.5 border-l border-gray-200 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors rounded-r flex items-center shrink-0"
-                                >
-                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                </button>
-                            )}
-                        </div>
-                    ))}
+                            Pending
+                            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${activeTab === 'pending' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}`}>
+                                {reports.filter(r => r.status === 'Pending CM' || r.status === 'Pending PM' || r.status === 'Rejected').length}
+                            </span>
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('approved')}
+                            className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors ${activeTab === 'approved'
+                                ? 'text-green-600 border-b-2 border-green-600 bg-green-50/50'
+                                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                                }`}
+                        >
+                            Approved
+                            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${activeTab === 'approved' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
+                                {reports.filter(r => r.status === 'Approved').length}
+                            </span>
+                        </button>
+                    </div>
                 </div>
+                )}
+
+                {inboxSection === 'reports' && (
+                <>
+                {/* Filters */}
+                <div className="p-2 border-b border-gray-100 bg-gray-50/50 space-y-1.5 shrink-0">
+                    <div className="grid grid-cols-2 gap-1.5">
+                        {/* Date Filter */}
+                        <div>
+                            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Date</label>
+                            <input
+                                type="date"
+                                className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                value={filterDate}
+                                onChange={(e) => setFilterDate(e.target.value)}
+                            />
+                        </div>
+                        {/* SWO Filter */}
+                        <div>
+                            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">SWO No.</label>
+                            <select
+                                className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                value={filterSwo}
+                                onChange={(e) => setFilterSwo(e.target.value)}
+                            >
+                                <option value="All">All SWO</option>
+                                {uniqueSwos.map(swo => (
+                                    <option key={swo} value={swo}>{swo}</option>
+                                ))}
+                            </select>
+                        </div>
+                        {/* Supervisor Filter */}
+                        <div>
+                            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Supervisor</label>
+                            <select
+                                className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                value={filterSupervisor}
+                                onChange={(e) => setFilterSupervisor(e.target.value)}
+                            >
+                                <option value="All">All Supervisors</option>
+                                {uniqueSupervisors.map(sup => (
+                                    <option key={sup} value={sup}>{sup}</option>
+                                ))}
+                            </select>
+                        </div>
+                        {/* Project Filter */}
+                        <div>
+                            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Project</label>
+                            <select
+                                className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                value={filterProject}
+                                onChange={(e) => setFilterProject(e.target.value)}
+                            >
+                                <option value="All">All Projects</option>
+                                {uniqueProjects.map(proj => (
+                                    <option key={proj} value={proj}>{proj}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    {/* Clear Filters */}
+                    {(filterDate || filterSwo !== 'All' || filterSupervisor !== 'All' || filterProject !== 'All') && (
+                        <button
+                            onClick={() => {
+                                setFilterDate('');
+                                setFilterSwo('All');
+                                setFilterSupervisor('All');
+                                setFilterProject('All');
+                            }}
+                            className="w-full text-xs text-red-500 hover:text-red-700 py-1 border border-red-200 rounded hover:bg-red-50 transition-colors"
+                        >
+                            Clear All Filters
+                        </button>
+                    )}
+                </div>
+
+                {/* Report List */}
+                <div className="overflow-y-auto flex-1 min-h-0 p-1.5 space-y-1">
+                    {filteredReports.length === 0 ? (
+                        <div className="text-center text-gray-400 text-xs py-6 italic">
+                            No reports found
+                        </div>
+                    ) : (
+                        filteredReports.map(r => (
+                            <div
+                                key={r.id}
+                                className={`w-full text-left rounded border transition-all flex items-stretch min-h-[2.75rem] ${selectedReport === r.id ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-gray-100 hover:border-gray-300 hover:bg-gray-50'}`}
+                            >
+                                <button
+                                    onClick={() => setSelectedReport(r.id)}
+                                    className="flex-1 text-left px-2 py-1.5 min-w-0 flex flex-col justify-center gap-0.5"
+                                >
+                                    <div className="flex items-center justify-between gap-1.5">
+                                        <span className="font-semibold text-gray-800 text-[11px] truncate">{r.swo}</span>
+                                        <span className="shrink-0"><StatusBadge status={r.status} compact /></span>
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 leading-tight">
+                                        <span>{r.date}</span> · <span className="font-medium text-gray-600">{r.supervisor || r.supervisor_name}</span>
+                                    </div>
+                                    <div className="text-[9px] text-gray-400 truncate">
+                                        {r.project_no}
+                                    </div>
+                                </button>
+                                {canDelete && (
+                                    <button
+                                        onClick={(e) => handleDeleteReport(r.id, e)}
+                                        title="Delete report"
+                                        className="px-1.5 border-l border-gray-200 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors rounded-r flex items-center shrink-0"
+                                    >
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                    </button>
+                                )}
+                            </div>
+                        ))
+                    )}
+                </div>
+                </>
+                )}
+
+                {inboxSection === 'changes' && (
+                <div className="overflow-y-auto flex-1 min-h-0 p-1.5 space-y-1">
+                    <div className="px-2.5 py-1.5 text-xs font-semibold text-amber-800 bg-amber-50 border-b border-amber-100">คำขอแก้ไข C1/C2/C3</div>
+                    {pendingChangeRequests.length === 0 ? (
+                        <div className="text-center text-gray-400 text-xs py-6 italic">ไม่มีคำขอแก้ไขรอดำเนินการ</div>
+                    ) : (
+                        pendingChangeRequests.map((req: any) => (
+                            <div
+                                key={req.id}
+                                className={`w-full text-left rounded border transition-all flex items-stretch min-h-[2.75rem] ${selectedChangeId === req.id ? 'border-amber-500 bg-amber-50 shadow-sm' : 'border-gray-100 hover:border-gray-300 hover:bg-gray-50'}`}
+                            >
+                                <button
+                                    onClick={() => setSelectedChangeId(req.id)}
+                                    className="flex-1 text-left px-2 py-1.5 min-w-0 flex flex-col justify-center gap-0.5"
+                                >
+                                    <div className="flex items-center justify-between gap-1.5">
+                                        <span className="font-semibold text-gray-800 text-[11px] truncate">{req.swo_no}</span>
+                                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${req.status === 'Pending PM' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>{req.status}</span>
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 leading-tight">{req.requested_by_name} · {req.work_name}</div>
+                                </button>
+                            </div>
+                        ))
+                    )}
+                </div>
+                )}
             </div>
 
             {/* Review Pane */}
             <div className="flex-1 min-h-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-                {(() => {
+                {inboxSection === 'changes' ? (
+                    selectedChangeRequest ? (
+                        <>
+                            <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-amber-50">
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-900">Change Request: {selectedChangeRequest.swo_no}</h2>
+                                    <p className="text-sm text-gray-500">ขอโดย {selectedChangeRequest.requested_by_name} · {selectedChangeRequest.work_name}</p>
+                                </div>
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${selectedChangeRequest.status === 'Pending PM' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'}`}>{selectedChangeRequest.status}</span>
+                            </div>
+                            <div className="p-6 flex-1 overflow-y-auto space-y-6">
+                                <div className="rounded-xl border border-gray-200 overflow-hidden">
+                                    <div className="px-4 py-3 bg-gray-50 border-b font-semibold text-gray-800 text-sm">C1 Draft (ปริมาณ/ราคา)</div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-white border-b"><tr><th className="px-4 py-2">Description</th><th className="px-4 py-2">Qty</th><th className="px-4 py-2">Unit</th><th className="px-4 py-2">Rate</th></tr></thead>
+                                            <tbody className="divide-y">
+                                                {(selectedChangeRequest.draft_activities || []).map((a: any, i: number) => (
+                                                    <tr key={i}><td className="px-4 py-2 font-medium">{a.description}</td><td className="px-4 py-2">{a.qty_total}</td><td className="px-4 py-2">{a.unit}</td><td className="px-4 py-2">{a.rate ?? '-'}</td></tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div className="flex flex-wrap gap-3 pt-4 border-t">
+                                    {canForwardChangeRequest(selectedChangeRequest) && (
+                                        <button onClick={() => handleChangeRequestForward(selectedChangeRequest)} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl">ส่งต่อ PM</button>
+                                    )}
+                                    {canApproveChangeRequest(selectedChangeRequest) && (
+                                        <button onClick={() => openChangeEditModal(selectedChangeRequest)} className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl">อนุมัติและแก้ไขปริมาณ/ราคา</button>
+                                    )}
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="p-12 text-center text-gray-400">เลือกคำขอแก้ไขจากรายการ</div>
+                    )
+                ) : (() => {
                     const report = reports.find(r => r.id === selectedReport);
-                    if (!report) return null;
+                    if (!report) return <div className="p-12 text-center text-gray-400">เลือกรายงานจากรายการ</div>;
 
                     return (
                         <>
@@ -1484,19 +2293,53 @@ export const ApprovalDashboard = () => {
                                     </div>
                                 )}
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                                        <MessageSquare className="w-4 h-4 mr-1 text-gray-400" /> Review Notes
-                                    </label>
-                                    <textarea
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                                        rows={4}
-                                        placeholder="Add comments before approving/rejecting..."
-                                        value={cmNotes}
-                                        onChange={e => setCmNotes(e.target.value)}
-                                        onFocus={() => { if (!cmNotes && report.cm_notes) setCmNotes(report.cm_notes); }}
-                                    />
-                                </div>
+                                {/* Show existing review notes from previous stages */}
+                                {(report.cm_notes || report.cm_approved_by) && report.status !== 'Pending CM' && (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded">CM Review</span>
+                                            {report.cm_approved_by && (
+                                                <span className="text-xs text-gray-500">by <span className="font-medium">{report.cm_approved_by}</span></span>
+                                            )}
+                                        </div>
+                                        {report.cm_notes ? (
+                                            <p className="text-sm text-blue-900 whitespace-pre-wrap">{report.cm_notes}</p>
+                                        ) : (
+                                            <p className="text-xs text-blue-400 italic">No notes added</p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {report.pm_notes && report.status === 'Approved' && (
+                                    <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded">PM Review</span>
+                                            {report.pm_approved_by && (
+                                                <span className="text-xs text-gray-500">by <span className="font-medium">{report.pm_approved_by}</span></span>
+                                            )}
+                                        </div>
+                                        <p className="text-sm text-green-900 whitespace-pre-wrap">{report.pm_notes}</p>
+                                    </div>
+                                )}
+
+                                {/* Review Notes input - only show when can act */}
+                                {canActOnReport(report) && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                                            <MessageSquare className="w-4 h-4 mr-1 text-gray-400" />
+                                            {report.status === 'Pending CM' ? 'CM Review Notes' : 'PM Review Notes'}
+                                        </label>
+                                        <textarea
+                                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                            rows={4}
+                                            placeholder={report.status === 'Pending CM' 
+                                                ? "Add CM comments before approving/rejecting..." 
+                                                : "Add PM comments before final approval/rejection..."}
+                                            value={cmNotes}
+                                            onChange={e => setCmNotes(e.target.value)}
+                                        />
+                                    </div>
+                                )}
                             </div>
 
                             <div className="p-4 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-3 mt-auto">
@@ -1526,6 +2369,39 @@ export const ApprovalDashboard = () => {
                     );
                 })()}
             </div>
+
+            {/* PM Edit Change Request Modal: edit qty/rate only */}
+            {changeEditModal.open && changeEditModal.req && changeEditDraft && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/40">
+                    <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="px-6 py-4 border-b bg-amber-50 font-bold text-amber-900">แก้ไขปริมาณ/ราคา (C1) — ไม่สามารถเพิ่ม/ลบรายการ</div>
+                        <div className="p-6 overflow-y-auto flex-1">
+                            <table className="w-full text-sm">
+                                <thead><tr className="border-b"><th className="text-left py-2">Description</th><th className="py-2">Qty</th><th className="py-2">Unit</th><th className="py-2">Rate</th></tr></thead>
+                                <tbody className="divide-y">
+                                    {changeEditDraft.activities.map((a: any, i: number) => (
+                                        <tr key={i}>
+                                            <td className="py-2 font-medium text-gray-800">{a.description}</td>
+                                            <td className="py-2">
+                                                <input type="text" inputMode="decimal" className="w-20 px-2 py-1 border rounded text-right" value={a.qty_total} onChange={e => setChangeEditDraft(prev => prev ? { ...prev, activities: prev.activities.map((x: any, j: number) => j === i ? { ...x, qty_total: e.target.value } : x) } : null)} />
+                                            </td>
+                                            <td className="py-2 text-gray-600">{a.unit}</td>
+                                            <td className="py-2">
+                                                <input type="text" className="w-24 px-2 py-1 border rounded text-right" value={a.rate} onChange={e => setChangeEditDraft(prev => prev ? { ...prev, activities: prev.activities.map((x: any, j: number) => j === i ? { ...x, rate: e.target.value } : x) } : null)} />
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <p className="text-xs text-gray-500 mt-3">C2/C3 ไม่แก้ไขรายการ — ใช้ตามเดิม</p>
+                        </div>
+                        <div className="px-6 py-4 border-t flex justify-end gap-3">
+                            <button onClick={() => { setChangeEditModal({ open: false, req: null }); setChangeEditDraft(null); }} className="px-4 py-2 border rounded-xl font-semibold">ยกเลิก</button>
+                            <button onClick={handleChangeRequestApply} className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl">Submit และอัปเดต SWO</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div>
     );

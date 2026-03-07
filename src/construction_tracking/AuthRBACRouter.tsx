@@ -1,6 +1,6 @@
 import React, { useState, ReactNode, useRef, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
-import { ShieldAlert, LogOut, Menu, UserCircle, Briefcase, FileText, BarChart3, Shield, User, Bell, BookOpen } from 'lucide-react';
+import { ShieldAlert, LogOut, Menu, UserCircle, Briefcase, FileText, BarChart3, Shield, User, Bell, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { UserManualModal } from './UserManual';
 import { useNotifications, NotificationItem } from './useNotifications';
 
@@ -158,11 +158,19 @@ const ClosureRejectedNotificationCard: React.FC<{
 };
 
 // --- Layout Component (Sidebar + Header) ---
+const SIDEBAR_STORAGE_KEY = 'cmg-sidebar-collapsed';
+
 const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.matchMedia('(max-width: 1023px)').matches || localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true';
+    } catch { return false; }
+  });
   const [bellOpen, setBellOpen] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
   const { count: notifCount, items: notifItems } = useNotifications(user);
@@ -187,6 +195,34 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
     });
     return unsub;
   }, [user?.role]);
+
+  // Persist sidebar collapse state
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, String(sidebarCollapsed));
+    } catch { /* ignore */ }
+  }, [sidebarCollapsed]);
+
+  // Responsive: close mobile menu when resizing to desktop; auto-collapse sidebar when viewport small
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const mqLg = window.matchMedia('(max-width: 1023px)');
+    const closeMobileIfDesktop = () => { if (!mq.matches) setIsMobileMenuOpen(false); };
+    const collapseSidebarIfSmall = () => { if (mqLg.matches) setSidebarCollapsed(true); };
+    closeMobileIfDesktop();
+    collapseSidebarIfSmall();
+    mq.addEventListener('change', closeMobileIfDesktop);
+    mqLg.addEventListener('change', collapseSidebarIfSmall);
+    return () => {
+      mq.removeEventListener('change', closeMobileIfDesktop);
+      mqLg.removeEventListener('change', collapseSidebarIfSmall);
+    };
+  }, []);
+
+  // Close mobile sidebar when route changes (e.g. after clicking a link)
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
 
   // Close bell dropdown on outside click
   useEffect(() => {
@@ -221,87 +257,108 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
     prevCountRef.current = notifCount;
   }, [notifCount]);
 
-  // Helper to determine link styles
+  // Helper to determine link styles (supports collapsed sidebar: icon-only on md)
   const navLinkClass = (path: string) => `
-    flex items-center px-4 py-3 rounded-lg mb-2 transition-colors
+    flex items-center rounded-lg mb-2 transition-colors
+    ${sidebarCollapsed ? 'md:justify-center md:px-2 md:py-3 px-4 py-3' : 'px-4 py-3'}
     ${location.pathname === path ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-100'}
   `;
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
 
-      {/* Sidebar */}
+      {/* Sidebar: collapsible on md+, overlay on mobile */}
       <aside className={`
-        fixed md:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 shadow-lg md:shadow-none transform transition-transform duration-300 ease-in-out
+        fixed md:static inset-y-0 left-0 z-50 bg-white border-r border-gray-200 shadow-lg md:shadow-none
+        flex flex-col overflow-x-hidden
+        w-64 transition-[transform,width] duration-300 ease-in-out
+        ${sidebarCollapsed ? 'md:w-16' : 'md:w-64'}
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-        flex flex-col
       `}>
-        <div className="flex items-center justify-center h-20 border-b border-gray-200">
-          <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center font-bold text-xl mr-3 shadow-md border-b-2 border-blue-700">
+        <div className={`flex items-center h-20 border-b border-gray-200 flex-shrink-0 ${sidebarCollapsed ? 'md:justify-center md:px-0 px-4' : 'justify-center px-4'}`}>
+          <div className={`w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center font-bold text-xl shadow-md border-b-2 border-blue-700 flex-shrink-0 mr-3 ${sidebarCollapsed ? 'md:mr-0' : 'md:mr-3'}`}>
             C
           </div>
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight">CMG Tracker</h1>
+          <h1 className={`text-xl font-bold text-gray-900 tracking-tight whitespace-nowrap ${sidebarCollapsed ? 'md:hidden' : ''}`}>CMG Tracker</h1>
         </div>
 
-        <nav className="flex-1 px-4 py-6 overflow-y-auto w-full">
-          <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Core</p>
+        <nav className="flex-1 px-4 md:px-2 py-6 overflow-y-auto overflow-x-hidden w-full">
+          <p className={`px-4 md:px-0 text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4 ${sidebarCollapsed ? 'md:hidden' : ''}`}>Core</p>
 
           {(user?.role !== 'Supervisor') && (
-            <Link to="/dashboard" className={navLinkClass('/dashboard')}>
-              <Briefcase className="w-5 h-5 mr-3" />
-              Projects
+            <Link to="/dashboard" className={navLinkClass('/dashboard')} title="Projects">
+              <Briefcase className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
+              <span className={sidebarCollapsed ? 'md:hidden' : ''}>Projects</span>
             </Link>
           )}
 
           {(user?.role === 'Admin' || user?.role === 'MD' || user?.role === 'PM' || user?.role === 'CM') && (
-            <Link to="/swo-creation" className={navLinkClass('/swo-creation')}>
-              <FileText className="w-5 h-5 mr-3" />
-              Create SWO
+            <Link to="/swo-creation" className={navLinkClass('/swo-creation')} title="Create SWO">
+              <FileText className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
+              <span className={sidebarCollapsed ? 'md:hidden' : ''}>Create SWO</span>
             </Link>
           )}
 
-          <Link to="/daily-report" className={navLinkClass('/daily-report')}>
-            <FileText className="w-5 h-5 mr-3" />
-            Daily Report
+          <Link to="/daily-report" className={navLinkClass('/daily-report')} title="Daily Report">
+            <FileText className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
+            <span className={sidebarCollapsed ? 'md:hidden' : ''}>Daily Report</span>
           </Link>
 
           {['Admin', 'MD', 'PM', 'CM'].includes(user?.role || '') && (
-            <Link to="/approvals" className={navLinkClass('/approvals')}>
-              <ShieldAlert className="w-5 h-5 mr-3" />
-              Approvals
+            <Link to="/approvals" className={navLinkClass('/approvals')} title="Approvals">
+              <ShieldAlert className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
+              <span className={sidebarCollapsed ? 'md:hidden' : ''}>Approvals</span>
             </Link>
           )}
 
-          <Link to="/closures" className={navLinkClass('/closures')}>
-            <ShieldAlert className="w-5 h-5 mr-3" />
-            Closures
+          <Link to="/closures" className={navLinkClass('/closures')} title="Closures">
+            <ShieldAlert className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
+            <span className={sidebarCollapsed ? 'md:hidden' : ''}>Closures</span>
           </Link>
 
           {['Admin', 'MD', 'GM', 'CD', 'PM'].includes(user?.role || '') && (
-            <Link to="/analytics" className={navLinkClass('/analytics')}>
-              <BarChart3 className="w-5 h-5 mr-3" />
-              Analytics
+            <Link to="/analytics" className={navLinkClass('/analytics')} title="Analytics">
+              <BarChart3 className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
+              <span className={sidebarCollapsed ? 'md:hidden' : ''}>Analytics</span>
             </Link>
           )}
 
           {(user?.role === 'Admin' || (user?.role as string) === 'Administrator') && (
             <>
-              <div className="mx-4 my-4 border-t border-gray-200" />
-              <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Administration</p>
+              <div className={`mx-4 my-4 border-t border-gray-200 ${sidebarCollapsed ? 'md:mx-2' : ''}`} />
+              <p className={`px-4 md:px-0 text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3 ${sidebarCollapsed ? 'md:hidden' : ''}`}>Administration</p>
             </>
           )}
 
           {(user?.role === 'Admin' || (user?.role as string) === 'Administrator') && (
-            <Link to="/admin" className={navLinkClass('/admin')}>
-              <Shield className="w-5 h-5 mr-3" />
-              Admin Panel
-              {pendingUserCount > 0 && (
+            <Link to="/admin" className={`${navLinkClass('/admin')} relative`} title="Admin Panel">
+              <span className="relative inline-flex">
+                <Shield className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
+                {pendingUserCount > 0 && sidebarCollapsed && (
+                  <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 flex items-center justify-center bg-red-500 text-white text-[9px] font-bold rounded-full animate-pulse" title={`${pendingUserCount} รออนุมัติ`} />
+                )}
+              </span>
+              <span className={sidebarCollapsed ? 'md:hidden' : ''}>Admin Panel</span>
+              {pendingUserCount > 0 && !sidebarCollapsed && (
                 <span className="ml-auto min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-red-500 text-white text-[11px] font-bold rounded-full animate-pulse">
                   {pendingUserCount > 99 ? '99+' : pendingUserCount}
                 </span>
               )}
             </Link>
           )}
+
+          {/* Collapse/Expand toggle — desktop only */}
+          <div className="mt-auto pt-4 pb-2 border-t border-gray-100 hidden md:flex justify-center">
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(c => !c)}
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+              title={sidebarCollapsed ? 'ขยายแถบเมนู' : 'ย่อแถบเมนู'}
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+            </button>
+          </div>
         </nav>
       </aside>
 
@@ -389,30 +446,28 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
                             onGoToPage={() => { navigate(item.path, { state: { targetId: item.targetId, notifType: item.type } }); setBellOpen(false); }}
                           />
                         ) : (
-                          <button
-                            key={item.id}
-                            onClick={() => { navigate(item.path, { state: { targetId: item.targetId, notifType: item.type } }); setBellOpen(false); }}
-                            className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors group"
-                          >
-                            <div className="flex items-start gap-3">
-                              <span className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 animate-pulse ${
-                                item.type === 'rejected' ? 'bg-red-500' :
-                                item.type === 'pending_cm' ? 'bg-yellow-500' :
-                                item.type === 'pending_pm' ? 'bg-blue-500' :
-                                item.type === 'assigned' ? 'bg-green-500' : 'bg-orange-500'
-                              }`}></span>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm text-gray-800 font-medium leading-snug group-hover:text-blue-700">{item.label}</p>
-                                <span className={`inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                  item.type === 'rejected' ? 'bg-red-100 text-red-600' :
-                                  item.type === 'pending_cm' ? 'bg-yellow-100 text-yellow-700' :
-                                  item.type === 'pending_pm' ? 'bg-blue-100 text-blue-700' :
-                                  item.type === 'assigned' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                                }`}>{item.step}</span>
-                              </div>
-                              <span className="text-gray-300 group-hover:text-blue-400 text-xs mt-1">→</span>
-                            </div>
-                          </button>
+                          (() => {
+                            const rowBg = item.type === 'rejected' ? 'bg-red-50 hover:bg-red-100' :
+                              item.type === 'pending_cm' ? 'bg-yellow-50 hover:bg-yellow-100' :
+                              item.type === 'pending_pm' ? 'bg-blue-50 hover:bg-blue-100' :
+                              item.type === 'assigned' ? 'bg-green-50 hover:bg-green-100' :
+                              item.type === 'swo_change_request' ? 'bg-amber-50 hover:bg-amber-100' :
+                              'bg-orange-50 hover:bg-orange-100';
+                            const dotBg = item.type === 'rejected' ? 'bg-red-500' : item.type === 'pending_cm' ? 'bg-yellow-500' : item.type === 'pending_pm' ? 'bg-blue-500' : item.type === 'assigned' ? 'bg-green-500' : item.type === 'swo_change_request' ? 'bg-amber-500' : 'bg-orange-500';
+                            const stepBg = item.type === 'rejected' ? 'bg-red-100 text-red-700' : item.type === 'pending_cm' ? 'bg-yellow-100 text-yellow-800' : item.type === 'pending_pm' ? 'bg-blue-100 text-blue-800' : item.type === 'assigned' ? 'bg-green-100 text-green-800' : item.type === 'swo_change_request' ? 'bg-amber-100 text-amber-800' : 'bg-orange-100 text-orange-800';
+                            return (
+                              <button
+                                key={item.id}
+                                onClick={() => { navigate(item.path, { state: { targetId: item.targetId, notifType: item.type } }); setBellOpen(false); }}
+                                className={`w-full text-left px-3 py-2 flex items-center gap-2 transition-colors ${rowBg}`}
+                              >
+                                <span className={`w-2 h-2 rounded-full shrink-0 animate-pulse ${dotBg}`} />
+                                <span className="flex-1 text-sm text-gray-800 truncate">{item.label}</span>
+                                <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${stepBg}`}>{item.step}</span>
+                                <span className="text-gray-400 text-xs shrink-0">→</span>
+                              </button>
+                            );
+                          })()
                         )
                       ))
                     )}
@@ -461,24 +516,19 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
                   <h3 className="text-lg font-bold text-orange-700">มีรายการรอดำเนินการ</h3>
                   <p className="mt-1 text-sm text-gray-500">คุณมี <span className="font-bold text-red-500">{notifCount} รายการ</span> ที่รอการดำเนินการ<br />กรุณาตรวจสอบและดำเนินการให้เรียบร้อย</p>
                 </div>
-                <div className="w-full max-h-40 overflow-y-auto space-y-1.5">
-                  {notifItems.slice(0, 5).map(item => (
-                    <div key={item.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-1.5 text-left">
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${
-                        item.type === 'rejected' ? 'bg-red-500' :
-                        item.type === 'pending_cm' ? 'bg-yellow-500' :
-                        item.type === 'pending_pm' ? 'bg-blue-500' :
-                        item.type === 'assigned' ? 'bg-green-500' : 'bg-orange-500'
-                      }`}></span>
-                      <p className="text-xs text-gray-700 truncate flex-1">{item.label}</p>
-                      <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                        item.type === 'rejected' ? 'bg-red-100 text-red-600' :
-                        item.type === 'pending_cm' ? 'bg-yellow-100 text-yellow-700' :
-                        item.type === 'pending_pm' ? 'bg-blue-100 text-blue-700' :
-                        item.type === 'assigned' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                      }`}>{item.step}</span>
-                    </div>
-                  ))}
+                <div className="w-full max-h-40 overflow-y-auto space-y-1">
+                  {notifItems.slice(0, 5).map(item => {
+                    const rowBg = item.type === 'rejected' ? 'bg-red-50' : item.type === 'pending_cm' ? 'bg-yellow-50' : item.type === 'pending_pm' ? 'bg-blue-50' : item.type === 'assigned' ? 'bg-green-50' : item.type === 'swo_change_request' ? 'bg-amber-50' : 'bg-orange-50';
+                    const dotBg = item.type === 'rejected' ? 'bg-red-500' : item.type === 'pending_cm' ? 'bg-yellow-500' : item.type === 'pending_pm' ? 'bg-blue-500' : item.type === 'assigned' ? 'bg-green-500' : item.type === 'swo_change_request' ? 'bg-amber-500' : 'bg-orange-500';
+                    const stepBg = item.type === 'rejected' ? 'bg-red-100 text-red-700' : item.type === 'pending_cm' ? 'bg-yellow-100 text-yellow-800' : item.type === 'pending_pm' ? 'bg-blue-100 text-blue-800' : item.type === 'assigned' ? 'bg-green-100 text-green-800' : item.type === 'swo_change_request' ? 'bg-amber-100 text-amber-800' : 'bg-orange-100 text-orange-800';
+                    return (
+                      <div key={item.id} className={`flex items-center gap-2 rounded px-2 py-1.5 text-left ${rowBg}`}>
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${dotBg}`} />
+                        <span className="text-xs text-gray-800 truncate flex-1">{item.label}</span>
+                        <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${stepBg}`}>{item.step}</span>
+                      </div>
+                    );
+                  })}
                   {notifItems.length > 5 && (
                     <p className="text-xs text-gray-400 text-center pt-1">และอีก {notifItems.length - 5} รายการ...</p>
                   )}
