@@ -15,6 +15,9 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
     const [realSwos, setRealSwos] = useState<any[]>([]);
     const [drafts, setDrafts] = useState<any[]>([]);
     const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+    const [draftSupervisorFilter, setDraftSupervisorFilter] = useState<string>('All');
+    const [draftProjectFilter, setDraftProjectFilter] = useState<string>('All');
+    const [draftViewMode, setDraftViewMode] = useState<'card' | 'table'>('card');
 
     useEffect(() => {
         const qProjects = query(col("projects"));
@@ -42,7 +45,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
             setRealSwos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
 
-        const qDrafts = query(col("site_work_orders"), where("status", "==", "Draft"));
+        const qDrafts = query(col("site_work_orders"), where("status", "in", ["Draft", "Ready"]));
         const unsubDrafts = onSnapshot(qDrafts, (snapshot) => {
             const all = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             // Filter by user's accessible projects
@@ -152,6 +155,46 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
         return user.assigned_projects?.includes(d.project_id);
     });
 
+    const draftProjectFilterOptions = React.useMemo(() => {
+        const projIds = new Set<string>();
+        const opts: { id: string; label: string }[] = [];
+        visibleDrafts.forEach(d => {
+            if (d.project_id && !projIds.has(d.project_id)) {
+                const proj = realProjects.find(p => p.id === d.project_id);
+                const label = proj ? `${proj.no || ''} ${proj.name || ''}`.trim() || 'Unknown Project' : 'Unknown Project';
+                projIds.add(d.project_id);
+                opts.push({ id: d.project_id, label });
+            }
+        });
+        return opts.sort((a, b) => a.label.localeCompare(b.label));
+    }, [visibleDrafts, realProjects]);
+
+    const supervisorFilterOptions = React.useMemo(() => {
+        const supIds = new Set<string>();
+        const opts: { id: string; name: string }[] = [];
+        visibleDrafts.forEach(d => {
+            if (d.supervisor_id && !supIds.has(d.supervisor_id)) {
+                const sup = realSupervisors.find(s => s.id === d.supervisor_id);
+                const name = sup?.name || d.supervisor_name || 'ไม่ทราบชื่อ';
+                supIds.add(d.supervisor_id);
+                opts.push({ id: d.supervisor_id, name });
+            }
+        });
+        return opts.sort((a, b) => a.name.localeCompare(b.name));
+    }, [visibleDrafts, realSupervisors]);
+
+    const filteredDrafts = visibleDrafts
+        .filter(d => {
+            if (draftProjectFilter === 'All') return true;
+            return d.project_id === draftProjectFilter;
+        })
+        .filter(d => {
+            if (draftSupervisorFilter === 'All') return true;
+            // กรณี Draft ไม่มี Supervisor ให้ยังโชว์อยู่เสมอ
+            if (!d.supervisor_id) return true;
+            return d.supervisor_id === draftSupervisorFilter;
+        });
+
     const loadDraft = (draft: any) => {
         setEditingDraftId(draft.id);
         setFormData({
@@ -179,6 +222,10 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
 
     const handleSaveDraft = async () => {
         try {
+            if (!formData.start_date) {
+                showAlert('warning', 'กรุณาเลือก Start Date', 'การบันทึก Draft ต้องระบุ Start Date ก่อน');
+                return;
+            }
             const selectedSupervisor = realSupervisors.find(s => s.id === formData.supervisor_id);
             const payload = {
                 project_id: formData.project_id,
@@ -208,6 +255,8 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                     });
                 }
                 showAlert('success', 'บันทึก Draft แล้ว', `อัปเดต Draft ${formData.swo_no} เรียบร้อยแล้ว`);
+                // หลังจากบันทึก Draft ขณะกำลังแก้ไข ให้กลับไปโหมดสร้าง SWO ใหม่
+                clearDraftEditing();
             } else {
                 await addDoc(col("site_work_orders"), { ...payload, created_at: new Date().toISOString() });
                 if (user) {
@@ -221,6 +270,67 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                     });
                 }
                 showAlert('success', 'บันทึก Draft แล้ว', `Draft ${formData.swo_no} ถูกบันทึกเรียบร้อยแล้ว`);
+                clearDraftEditing();
+            }
+        } catch (err: any) {
+            showAlert('error', 'เกิดข้อผิดพลาด', err.message);
+        }
+    };
+
+    const handleMarkReady = async () => {
+        if (!formData.supervisor_id) {
+            showAlert('warning', 'กรุณาเลือก Supervisor', 'กรุณาเลือก Supervisor ก่อนเปลี่ยนสถานะเป็น Ready');
+            return;
+        }
+        if (!formData.start_date) {
+            showAlert('warning', 'กรุณาเลือก Start Date', 'การเปลี่ยนสถานะเป็น Ready ต้องระบุ Start Date ก่อน');
+            return;
+        }
+        try {
+            const selectedSupervisor = realSupervisors.find(s => s.id === formData.supervisor_id);
+            const payload = {
+                project_id: formData.project_id,
+                swo_no: formData.swo_no,
+                work_name: formData.work_name,
+                supervisor_id: formData.supervisor_id,
+                supervisor_name: selectedSupervisor?.name || '',
+                activities,
+                equipmentList,
+                teamList,
+                additional_notes: formData.additional_notes,
+                start_date: formData.start_date,
+                finish_date: formData.finish_date,
+                status: 'Ready' as const,
+                updated_at: new Date().toISOString()
+            };
+            if (editingDraftId) {
+                await updateDoc(docRef("site_work_orders", editingDraftId), payload);
+                if (user) {
+                    await logActivity({
+                        uid: user.uid,
+                        name: user.name,
+                        role: user.role,
+                        action: 'Ready',
+                        menu: 'Create SWO',
+                        detail: `Ready SWO Draft No. ${formData.swo_no || '-'} - ${formData.work_name}`
+                    });
+                }
+                showAlert('success', 'เปลี่ยนสถานะเป็น Ready', `Draft ${formData.swo_no} ถูกเปลี่ยนเป็น Ready แล้ว`);
+                // หลังจาก Ready ขณะกำลังแก้ไข ให้กลับไปโหมดสร้าง SWO ใหม่
+                clearDraftEditing();
+            } else {
+                await addDoc(col("site_work_orders"), { ...payload, created_at: new Date().toISOString() });
+                if (user) {
+                    await logActivity({
+                        uid: user.uid,
+                        name: user.name,
+                        role: user.role,
+                        action: 'Ready',
+                        menu: 'Create SWO',
+                        detail: `Create Ready SWO Draft No. ${formData.swo_no || '-'} - ${formData.work_name}`
+                    });
+                }
+                showAlert('success', 'บันทึกเป็น Ready แล้ว', `Draft ${formData.swo_no} ถูกบันทึกเป็น Ready แล้ว`);
                 clearDraftEditing();
             }
         } catch (err: any) {
@@ -381,45 +491,211 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
             <AlertModal {...modalProps} />
 
             {/* Draft Cards */}
-            {!editSwo && visibleDrafts.length > 0 && (
+            {!editSwo && filteredDrafts.length > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                    <h3 className="text-sm font-bold text-amber-800 mb-3 flex items-center gap-2">
-                        <Save className="w-4 h-4" />
-                        Saved Drafts ({visibleDrafts.length})
-                    </h3>
-                    <div className="flex flex-wrap gap-3">
-                        {visibleDrafts.map(draft => {
-                            const supName = realSupervisors.find(s => s.id === draft.supervisor_id)?.name || draft.supervisor_name || 'ยังไม่ได้เลือก';
-                            const projNo = realProjects.find(p => p.id === draft.project_id)?.no || '';
-                            const isActive = editingDraftId === draft.id;
-                            return (
-                                <div
-                                    key={draft.id}
-                                    className={`relative flex items-start gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all shadow-sm min-w-[200px] max-w-[260px] ${
-                                        isActive
-                                            ? 'border-amber-500 bg-amber-100'
-                                            : 'border-amber-200 bg-white hover:border-amber-400 hover:bg-amber-50'
-                                    }`}
-                                    onClick={() => loadDraft(draft)}
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                        <h3 className="text-sm font-bold text-amber-800 flex items-center gap-2">
+                            <Save className="w-4 h-4" />
+                            Saved Drafts ({filteredDrafts.length})
+                        </h3>
+                        <div className="flex items-center gap-2 text-xs">
+                            <button
+                                type="button"
+                                onClick={() => setDraftViewMode('card')}
+                                className={`px-2 py-1 rounded-md border text-xs font-medium ${
+                                    draftViewMode === 'card'
+                                        ? 'bg-amber-500 text-white border-amber-600'
+                                        : 'bg-white text-amber-700 border-amber-300 hover:bg-amber-50'
+                                }`}
+                            >
+                                Card
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setDraftViewMode('table')}
+                                className={`px-2 py-1 rounded-md border text-xs font-medium ${
+                                    draftViewMode === 'table'
+                                        ? 'bg-amber-500 text-white border-amber-600'
+                                        : 'bg-white text-amber-700 border-amber-300 hover:bg-amber-50'
+                                }`}
+                            >
+                                Table
+                            </button>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs flex-wrap">
+                            <div className="flex items-center gap-2">
+                                <span className="text-amber-700 font-medium">Project:</span>
+                                <select
+                                    className="border border-amber-300 rounded-md bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                    value={draftProjectFilter}
+                                    onChange={(e) => setDraftProjectFilter(e.target.value)}
                                 >
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-bold text-gray-800 truncate">{draft.swo_no || 'ยังไม่มี SWO No.'}</p>
-                                        {projNo && <p className="text-xs text-blue-600 font-medium truncate">{projNo}</p>}
-                                        <p className="text-xs text-gray-500 truncate mt-0.5">👷 {supName}</p>
-                                        {draft.work_name && <p className="text-xs text-gray-400 truncate">{draft.work_name}</p>}
-                                        {isActive && <span className="inline-block mt-1 text-xs bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-bold">กำลังแก้ไข</span>}
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); handleDeleteDraft(draft.id, draft.swo_no); }}
-                                        className="shrink-0 p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                    >
-                                        <X className="w-3.5 h-3.5" />
-                                    </button>
-                                </div>
-                            );
-                        })}
+                                    <option value="All">All</option>
+                                    {draftProjectFilterOptions.map(opt => (
+                                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-amber-700 font-medium">Supervisor:</span>
+                                <select
+                                    className="border border-amber-300 rounded-md bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                    value={draftSupervisorFilter}
+                                    onChange={(e) => setDraftSupervisorFilter(e.target.value)}
+                                >
+                                    <option value="All">All</option>
+                                    {supervisorFilterOptions.map(opt => (
+                                        <option key={opt.id} value={opt.id}>{opt.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
                     </div>
+                    {draftViewMode === 'card' ? (
+                        <div className="flex flex-wrap gap-3">
+                            {filteredDrafts.map(draft => {
+                                const supName = realSupervisors.find(s => s.id === draft.supervisor_id)?.name || draft.supervisor_name || 'ยังไม่ได้เลือก';
+                                const projNo = realProjects.find(p => p.id === draft.project_id)?.no || '';
+                                const isActive = editingDraftId === draft.id;
+                                const isReady = draft.status === 'Ready';
+                                const isNearStart = (() => {
+                                    if (!draft.start_date) return false;
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    const start = new Date(draft.start_date);
+                                    start.setHours(0, 0, 0, 0);
+                                    const diffDays = (start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
+                                    // ใกล้ถึงหรือเลย Start Date ภายใน 1 วัน
+                                    return diffDays <= 1;
+                                })();
+                                return (
+                                    <div
+                                        key={draft.id}
+                                        className={`relative flex items-start gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all shadow-sm min-w-[200px] max-w-[260px] ${
+                                            isNearStart
+                                                ? 'border-red-500 bg-red-50 animate-pulse'
+                                                : isReady
+                                                    ? 'border-emerald-500 bg-emerald-50'
+                                                    : isActive
+                                                        ? 'border-amber-500 bg-amber-100'
+                                                        : 'border-amber-200 bg-white hover:border-amber-400 hover:bg-amber-50'
+                                        }`}
+                                        onClick={() => loadDraft(draft)}
+                                    >
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-bold text-gray-800 truncate">{draft.swo_no || 'ยังไม่มี SWO No.'}</p>
+                                            {projNo && <p className="text-xs text-blue-600 font-medium truncate">{projNo}</p>}
+                                            <p className="text-xs text-gray-500 truncate mt-0.5">👷 {supName}</p>
+                                            {draft.work_name && <p className="text-xs text-gray-400 truncate">{draft.work_name}</p>}
+                                            <div className="mt-1 space-x-1">
+                                                {isActive && (
+                                                    <span className="inline-block text-xs bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-bold">
+                                                        กำลังแก้ไข
+                                                    </span>
+                                                )}
+                                                {isReady && (
+                                                    <span className="inline-block text-xs bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-bold">
+                                                        Ready
+                                                    </span>
+                                                )}
+                                                {isNearStart && (
+                                                    <span className="inline-block text-xs bg-red-500 text-white px-1.5 py-0.5 rounded-full font-bold">
+                                                        Please Assign
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteDraft(draft.id, draft.swo_no); }}
+                                            className="shrink-0 p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="border border-amber-200 rounded-lg bg-white overflow-x-auto">
+                            <table className="w-full text-xs text-gray-700">
+                                <thead className="bg-amber-50 border-b border-amber-200">
+                                    <tr>
+                                        <th className="px-3 py-2 text-left font-semibold">SWO No.</th>
+                                        <th className="px-3 py-2 text-left font-semibold">Project</th>
+                                        <th className="px-3 py-2 text-left font-semibold">Supervisor</th>
+                                        <th className="px-3 py-2 text-left font-semibold">Work Name</th>
+                                        <th className="px-3 py-2 text-left font-semibold">Status</th>
+                                        <th className="px-3 py-2 text-center font-semibold">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredDrafts.map(draft => {
+                                        const supName = realSupervisors.find(s => s.id === draft.supervisor_id)?.name || draft.supervisor_name || 'ยังไม่ได้เลือก';
+                                        const proj = realProjects.find(p => p.id === draft.project_id);
+                                        const projLabel = proj ? `${proj.no || ''} ${proj.name || ''}`.trim() || '-' : '-';
+                                        const isActive = editingDraftId === draft.id;
+                                        const isReady = draft.status === 'Ready';
+                                        const isNearStart = (() => {
+                                            if (!draft.start_date) return false;
+                                            const today = new Date();
+                                            today.setHours(0, 0, 0, 0);
+                                            const start = new Date(draft.start_date);
+                                            start.setHours(0, 0, 0, 0);
+                                            const diffDays = (start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
+                                            return diffDays <= 1;
+                                        })();
+                                        return (
+                                            <tr
+                                                key={draft.id}
+                                                className={`border-b last:border-b-0 cursor-pointer hover:bg-amber-50 ${
+                                                    isNearStart
+                                                        ? 'bg-red-50 animate-pulse'
+                                                        : isReady
+                                                            ? 'bg-emerald-50'
+                                                            : ''
+                                                }`}
+                                                onClick={() => loadDraft(draft)}
+                                            >
+                                                <td className="px-3 py-2 font-medium text-gray-800">{draft.swo_no || 'ยังไม่มี SWO No.'}</td>
+                                                <td className="px-3 py-2">{projLabel}</td>
+                                                <td className="px-3 py-2">{supName}</td>
+                                                <td className="px-3 py-2">{draft.work_name || '-'}</td>
+                                                <td className="px-3 py-2">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                                        isReady
+                                                            ? 'bg-emerald-500 text-white'
+                                                            : 'bg-amber-500 text-white'
+                                                    }`}>
+                                                        {isReady ? 'Ready' : 'Draft'}
+                                                    </span>
+                                                    {isActive && (
+                                                        <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">
+                                                            กำลังแก้ไข
+                                                        </span>
+                                                    )}
+                                                    {isNearStart && (
+                                                        <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500 text-white">
+                                                            Please Assign
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-2 text-center">
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteDraft(draft.id, draft.swo_no); }}
+                                                        className="inline-flex items-center px-2 py-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                                                    >
+                                                        <X className="w-3.5 h-3.5 mr-1" /> ลบ
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -448,7 +724,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                     </h1>
                     <p className="text-gray-500 mt-1">
                         {editingDraftId
-                            ? <span className="text-amber-600 font-medium">กำลังแก้ไข Draft — กด Save Draft เพื่อบันทึก หรือ Assign SWO เพื่อส่งงานทันที</span>
+                            ? <span className="text-amber-600 font-medium">กำลังแก้ไข Draft — กด Save Draft เพื่อบันทึก, Ready เพื่อเตรียมส่ง หรือ Assign SWO เพื่อส่งงานทันที</span>
                             : 'Fill in the details below or import data from Excel.'}
                     </p>
                 </div>
@@ -459,6 +735,13 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                         className="flex-1 md:flex-none justify-center px-4 py-2 border border-amber-400 text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 flex items-center font-medium shadow-sm transition-colors"
                     >
                         <Save className="w-4 h-4 mr-2" /> Save Draft
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleMarkReady}
+                        className="flex-1 md:flex-none justify-center px-4 py-2 border border-emerald-500 text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 flex items-center font-medium shadow-sm transition-colors"
+                    >
+                        <Send className="w-4 h-4 mr-2" /> Ready
                     </button>
                     <button
                         type="button"
@@ -785,6 +1068,9 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                                 )}
                                 <button type="button" onClick={handleSaveDraft} className="px-5 py-2.5 border border-amber-400 text-amber-700 bg-amber-50 font-medium rounded-lg hover:bg-amber-100 transition-colors flex items-center shadow-sm">
                                     <Save className="w-4 h-4 mr-2" /> Save Draft
+                                </button>
+                                <button type="button" onClick={handleMarkReady} className="px-5 py-2.5 border border-emerald-500 text-emerald-700 bg-emerald-50 font-medium rounded-lg hover:bg-emerald-100 transition-colors flex items-center shadow-sm">
+                                    <Send className="w-4 h-4 mr-2" /> Ready
                                 </button>
                                 <button type="submit" form="swo-form" className="px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center shadow-sm">
                                     <Send className="w-4 h-4 mr-2" /> Assign SWO
