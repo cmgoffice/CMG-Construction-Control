@@ -4,8 +4,11 @@ import {
     Shield, Users, Wrench, HardHat, ChevronRight, ChevronDown,
     Bell, ClipboardList, AlertTriangle, LogIn, Settings,
     UserCheck, Star, ArrowRight, Info, Layers, Eye,
-    PlusCircle, Edit3, Send, XCircle, RefreshCw, Lock
+    PlusCircle, Edit3, Send, XCircle, RefreshCw, Lock, Download,
+    Search, Calendar
 } from 'lucide-react';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType } from 'docx';
+import { saveAs } from 'file-saver';
 
 const ROLES = ['Admin', 'PM', 'CM', 'Supervisor', 'MD / CD / GM'] as const;
 type ManualRole = typeof ROLES[number];
@@ -37,8 +40,9 @@ const roleSections: Record<ManualRole, MenuSection[]> = {
             who: 'Admin เท่านั้น',
             steps: [
                 { step: 1, icon: <UserCheck className="w-4 h-4" />, title: 'อนุมัติ / ปฏิเสธผู้ใช้ใหม่', desc: 'เมื่อมีผู้ลงทะเบียนใหม่ กระดิ่งแจ้งเตือนจะแสดงตัวเลข → ไปที่เมนู Admin Panel แท็บ "ผู้ใช้งาน" → กด Approve หรือ Reject', tip: 'ไอคอนกระดิ่งด้านบนขวาจะแสดงตัวเลขสีแดงเมื่อมีผู้รอการอนุมัติ' },
-                { step: 2, icon: <Settings className="w-4 h-4" />, title: 'กำหนด Role และสิทธิ์', desc: 'คลิกไอคอนดินสอ (Edit) ข้างชื่อผู้ใช้ → เลือก Role ที่ต้องการ (PM / CM / Supervisor ฯลฯ) → ติ๊กเลือกโปรเจกต์ที่ต้องการมอบหมาย → กด Save', tip: 'การเปลี่ยน Role และ Assigned Projects จะมีผลทันทีโดยไม่ต้องให้ผู้ใช้ logout' },
-                { step: 3, icon: <BarChart3 className="w-4 h-4" />, title: 'ดู Activity Log', desc: 'แท็บ "Activity Log" → ดูประวัติการใช้งานทั้งหมด เช่น Login, Create, Approve, Reject พร้อมระบุ SWO No. และเหตุผล', tip: 'สามารถกรองตามชื่อผู้ใช้, Role, วันที่, หรือประเภทกิจกรรมได้' },
+                { step: 2, icon: <Search className="w-4 h-4" />, title: 'ค้นหาผู้ใช้งาน', desc: 'ใช้ช่องค้นหาด้านบนตารางผู้ใช้ → พิมพ์ชื่อ, อีเมล, ตำแหน่ง หรือ Role → ระบบจะแสดงเฉพาะผู้ใช้ที่ตรงกับคำค้นหา → กด "ล้างการค้นหา" เพื่อแสดงทั้งหมด', tip: 'การค้นหาแบบ Real-time ไม่ต้องกดปุ่มค้นหา' },
+                { step: 3, icon: <Settings className="w-4 h-4" />, title: 'กำหนด Role และสิทธิ์', desc: 'คลิกไอคอนดินสอ (Edit) ข้างชื่อผู้ใช้ → เลือก Role ที่ต้องการ (PM / CM / Supervisor ฯลฯ) → ติ๊กเลือกโปรเจกต์ที่ต้องการมอบหมาย → กด Save', tip: 'การเปลี่ยน Role และ Assigned Projects จะมีผลทันทีโดยไม่ต้องให้ผู้ใช้ logout' },
+                { step: 4, icon: <BarChart3 className="w-4 h-4" />, title: 'ดู Activity Log', desc: 'แท็บ "Activity Log" → ดูประวัติการใช้งานทั้งหมด เช่น Login, Create, Approve, Reject พร้อมระบุ SWO No. และเหตุผล', tip: 'สามารถกรองตามชื่อผู้ใช้, Role, วันที่, หรือประเภทกิจกรรมได้' },
             ]
         },
         {
@@ -202,9 +206,10 @@ const roleSections: Record<ManualRole, MenuSection[]> = {
             badgeColor: 'bg-orange-100 text-orange-700',
             who: 'Supervisor',
             steps: [
-                { step: 1, icon: <Bell className="w-4 h-4" />, title: 'รับแจ้งเตือน SWO ใหม่', desc: 'เมื่อถูก Assign SWO → กระดิ่งแสดงแจ้งเตือน → คลิกและไปที่หน้า Daily Report → กด "Accept SWO" เพื่อรับงาน' },
-                { step: 2, icon: <Edit3 className="w-4 h-4" />, title: 'กรอก Daily Report', desc: 'เลือก SWO → เลือกวันที่ → กรอก C1 Work Activities (Today\'s Progress), C2 Equipment Usage, C3 Worker Headcount → กด Submit', tip: 'ต้องกรอกทุกวันที่ทำงาน — ข้อมูลย้อนหลังจะอ่านได้อย่างเดียว' },
-                { step: 3, icon: <RefreshCw className="w-4 h-4" />, title: 'แก้ไขหลัง Reject', desc: 'หากรายงานถูก Reject → กระดิ่งแจ้งเตือนพร้อมเหตุผล → คลิกเข้าไปแก้ไข → กด "Resubmit for Approval"' },
+                { step: 1, icon: <Bell className="w-4 h-4" />, title: 'รับแจ้งเตือน SWO ใหม่', desc: 'เมื่อถูก Assign SWO → กระดิ่งแสดงแจ้งเตือน → คลิกและไปที่หน้า Daily Report → ดู SWO Details พร้อม Start Date และ End Date → กด "Accept SWO" เพื่อรับงาน', tip: 'SWO จะแสดง Start Date และ End Date ให้เห็นชัดเจนในส่วน New SWO Assignment' },
+                { step: 2, icon: <Calendar className="w-4 h-4" />, title: 'ดูข้อมูล SWO และวันที่', desc: 'ในหน้า Daily Progress Report จะแสดงข้อมูล SWO No., Work Name พร้อม Start Date และ End Date ด้านบนของฟอร์ม → ใช้เป็นข้อมูลอ้างอิงในการกรอกรายงาน', tip: 'วันที่จะแสดงเป็น "Not specified" หากไม่ได้กำหนดไว้ตอนสร้าง SWO' },
+                { step: 3, icon: <Edit3 className="w-4 h-4" />, title: 'กรอก Daily Report', desc: 'เลือก SWO → เลือกวันที่ → กรอก C1 Work Activities (Today\'s Progress), C2 Equipment Usage, C3 Worker Headcount → กด Submit', tip: 'ต้องกรอกทุกวันที่ทำงาน — ข้อมูลย้อนหลังจะอ่านได้อย่างเดียว' },
+                { step: 4, icon: <RefreshCw className="w-4 h-4" />, title: 'แก้ไขหลัง Reject', desc: 'หากรายงานถูก Reject → กระดิ่งแจ้งเตือนพร้อมเหตุผล → คลิกเข้าไปแก้ไข → กด "Resubmit for Approval"' },
             ]
         },
         {
@@ -215,8 +220,9 @@ const roleSections: Record<ManualRole, MenuSection[]> = {
             who: 'Supervisor',
             steps: [
                 { step: 1, icon: <Send className="w-4 h-4" />, title: 'ส่งคำขอปิด SWO', desc: 'เมื่องานเสร็จสิ้น → เมนู Closures → กด "Request Closure" → เลือก SWO ที่ต้องการปิด → กด Confirm', tip: 'SWO ต้องมีสถานะ Active และไม่มีรายงานค้างรอก่อน' },
-                { step: 2, icon: <Bell className="w-4 h-4" />, title: 'รับแจ้งเตือนเมื่อถูก Reject', desc: 'ถ้า PM Reject → กระดิ่งแจ้งเตือนพร้อมแสดง SWO No., ชื่องาน, Role ที่ Reject, และเหตุผล' },
-                { step: 3, icon: <RefreshCw className="w-4 h-4" />, title: 'ส่งคำขอใหม่ หรือยกเลิก', desc: 'กดปุ่ม "ส่งคำขอใหม่" เพื่อส่งกลับ PM อีกครั้ง หรือกด "ยกเลิก" เพื่อยกเลิกคำขอปิดและกลับสู่สถานะ Active' },
+                { step: 2, icon: <Bell className="w-4 h-4" />, title: 'รับแจ้งเตือนเมื่อถูก Reject', desc: 'ถ้า PM Reject → กระดิ่งแจ้งเตือนพร้อมแสดง SWO No., ชื่องาน, Role ที่ Reject, และเหตุผล → คลิกแจ้งเตือนเพื่อไปที่หน้า Closures', tip: 'SWO ที่ถูก Reject จะแสดงด้วยพื้นหลังสีแดงและสถานะ "PM Rejected"' },
+                { step: 3, icon: <Eye className="w-4 h-4" />, title: 'ดูรายละเอียดการ Reject', desc: 'คลิกแถว SWO ที่ถูก Reject หรือกดปุ่ม "View Rejection" → เปิด Modal แสดงเหตุผลที่ PM ระบุ พร้อมรายละเอียด SWO', tip: 'Modal จะแสดงคำแนะนำขั้นตอนต่อไปและปุ่มดำเนินการ' },
+                { step: 4, icon: <RefreshCw className="w-4 h-4" />, title: 'ส่งคำขอใหม่ หรือยกเลิก', desc: 'ใน Modal → กด "ส่งคำขอใหม่" เพื่อแก้ไขปัญหาแล้วส่งกลับ PM อีกครั้ง หรือกด "ยกเลิกคำขอ" เพื่อยกเลิกและกลับสู่สถานะ Active', tip: 'ควรแก้ไขปัญหาตามเหตุผลที่ PM ระบุก่อนส่งคำขอใหม่' },
             ]
         },
     ],
@@ -278,6 +284,770 @@ interface UserManualModalProps {
     currentRole?: string;
 }
 
+// Function to generate Word document
+const generateWordDocument = async () => {
+    const doc = new Document({
+        styles: {
+            default: {
+                document: {
+                    run: {
+                        font: "Sarabun",
+                        size: 24,
+                    },
+                },
+            },
+            paragraphStyles: [
+                {
+                    id: "customTitle",
+                    name: "Custom Title",
+                    basedOn: "Normal",
+                    next: "Normal",
+                    run: {
+                        size: 48,
+                        bold: true,
+                        color: "2E86AB",
+                        font: "Sarabun",
+                    },
+                    paragraph: {
+                        spacing: { after: 400 },
+                        alignment: AlignmentType.CENTER,
+                    },
+                },
+                {
+                    id: "customSubtitle",
+                    name: "Custom Subtitle",
+                    basedOn: "Normal",
+                    next: "Normal",
+                    run: {
+                        size: 32,
+                        italics: true,
+                        color: "A23B72",
+                        font: "Sarabun",
+                    },
+                    paragraph: {
+                        spacing: { after: 300 },
+                        alignment: AlignmentType.CENTER,
+                    },
+                },
+                {
+                    id: "roleHeader",
+                    name: "Role Header",
+                    basedOn: "Normal",
+                    next: "Normal",
+                    run: {
+                        size: 36,
+                        bold: true,
+                        color: "FFFFFF",
+                        font: "Sarabun",
+                    },
+                    paragraph: {
+                        spacing: { before: 400, after: 200 },
+                        alignment: AlignmentType.CENTER,
+                        shading: {
+                            type: ShadingType.SOLID,
+                            color: "2E86AB",
+                        },
+                    },
+                },
+                {
+                    id: "menuHeader",
+                    name: "Menu Header",
+                    basedOn: "Normal",
+                    next: "Normal",
+                    run: {
+                        size: 28,
+                        bold: true,
+                        color: "2E86AB",
+                        font: "Sarabun",
+                    },
+                    paragraph: {
+                        spacing: { before: 300, after: 150 },
+                        border: {
+                            bottom: {
+                                style: BorderStyle.SINGLE,
+                                size: 6,
+                                color: "2E86AB",
+                            },
+                        },
+                    },
+                },
+            ],
+        },
+        sections: [
+            {
+                properties: {
+                    page: {
+                        margin: {
+                            top: 1440,
+                            right: 1440,
+                            bottom: 1440,
+                            left: 1440,
+                        },
+                    },
+                },
+                children: [
+                    // Cover Page
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: "คู่มือการใช้งาน",
+                                size: 48,
+                                bold: true,
+                                color: "2E86AB",
+                                font: "Sarabun",
+                            }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { after: 200 },
+                    }),
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: "CMG TRACKER",
+                                size: 56,
+                                bold: true,
+                                color: "A23B72",
+                                font: "Sarabun",
+                            }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { after: 400 },
+                    }),
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: "Construction Management & Control System",
+                                size: 28,
+                                italics: true,
+                                color: "666666",
+                                font: "Sarabun",
+                            }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { after: 600 },
+                    }),
+                    
+                    // Version Box
+                    new Table({
+                        width: { size: 100, type: WidthType.PERCENTAGE },
+                        rows: [
+                            new TableRow({
+                                children: [
+                                    new TableCell({
+                                        children: [
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({
+                                                        text: "เวอร์ชัน 2.0",
+                                                        size: 32,
+                                                        bold: true,
+                                                        color: "FFFFFF",
+                                                        font: "Sarabun",
+                                                    }),
+                                                ],
+                                                alignment: AlignmentType.CENTER,
+                                                spacing: { before: 200, after: 200 },
+                                            }),
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({
+                                                        text: "อัพเดทล่าสุด",
+                                                        size: 24,
+                                                        color: "FFFFFF",
+                                                        font: "Sarabun",
+                                                    }),
+                                                ],
+                                                alignment: AlignmentType.CENTER,
+                                            }),
+                                        ],
+                                        shading: {
+                                            type: ShadingType.SOLID,
+                                            color: "F18F01",
+                                        },
+                                        margins: {
+                                            top: 200,
+                                            bottom: 200,
+                                            left: 200,
+                                            right: 200,
+                                        },
+                                    }),
+                                ],
+                            }),
+                        ],
+                        margins: {
+                            top: 400,
+                            bottom: 400,
+                        },
+                    }),
+                    
+                    new Paragraph({
+                        text: "",
+                        spacing: { before: 1200, after: 1200 },
+                    }),
+                    
+                    // Table of Contents
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: "สารบัญ",
+                                size: 36,
+                                bold: true,
+                                color: "2E86AB",
+                                font: "Sarabun",
+                            }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 400, after: 300 },
+                        shading: {
+                            type: ShadingType.SOLID,
+                            color: "E8F4F8",
+                        },
+                    }),
+                    
+                    // TOC Table
+                    new Table({
+                        width: { size: 100, type: WidthType.PERCENTAGE },
+                        rows: [
+                            new TableRow({
+                                children: [
+                                    new TableCell({
+                                        children: [
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({
+                                                        text: "หัวข้อ",
+                                                        bold: true,
+                                                        size: 26,
+                                                        color: "FFFFFF",
+                                                        font: "Sarabun",
+                                                    }),
+                                                ],
+                                                alignment: AlignmentType.CENTER,
+                                            }),
+                                        ],
+                                        shading: {
+                                            type: ShadingType.SOLID,
+                                            color: "2E86AB",
+                                        },
+                                        width: { size: 80, type: WidthType.PERCENTAGE },
+                                    }),
+                                    new TableCell({
+                                        children: [
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({
+                                                        text: "หน้า",
+                                                        bold: true,
+                                                        size: 26,
+                                                        color: "FFFFFF",
+                                                        font: "Sarabun",
+                                                    }),
+                                                ],
+                                                alignment: AlignmentType.CENTER,
+                                            }),
+                                        ],
+                                        shading: {
+                                            type: ShadingType.SOLID,
+                                            color: "2E86AB",
+                                        },
+                                        width: { size: 20, type: WidthType.PERCENTAGE },
+                                    }),
+                                ],
+                            }),
+                            ...ROLES.map((role, index) => 
+                                new TableRow({
+                                    children: [
+                                        new TableCell({
+                                            children: [
+                                                new Paragraph({
+                                                    children: [
+                                                        new TextRun({
+                                                            text: `${index + 1}. ${role} Role`,
+                                                            size: 24,
+                                                            font: "Sarabun",
+                                                        }),
+                                                    ],
+                                                }),
+                                            ],
+                                            shading: {
+                                                type: ShadingType.SOLID,
+                                                color: index % 2 === 0 ? "F8F9FA" : "FFFFFF",
+                                            },
+                                        }),
+                                        new TableCell({
+                                            children: [
+                                                new Paragraph({
+                                                    children: [
+                                                        new TextRun({
+                                                            text: `${index + 3}`,
+                                                            size: 24,
+                                                            font: "Sarabun",
+                                                        }),
+                                                    ],
+                                                    alignment: AlignmentType.CENTER,
+                                                }),
+                                            ],
+                                            shading: {
+                                                type: ShadingType.SOLID,
+                                                color: index % 2 === 0 ? "F8F9FA" : "FFFFFF",
+                                            },
+                                        }),
+                                    ],
+                                })
+                            ),
+                        ],
+                        borders: {
+                            top: { style: BorderStyle.SINGLE, size: 6, color: "2E86AB" },
+                            bottom: { style: BorderStyle.SINGLE, size: 6, color: "2E86AB" },
+                            left: { style: BorderStyle.SINGLE, size: 6, color: "2E86AB" },
+                            right: { style: BorderStyle.SINGLE, size: 6, color: "2E86AB" },
+                            insideHorizontal: { style: BorderStyle.SINGLE, size: 3, color: "CCCCCC" },
+                            insideVertical: { style: BorderStyle.SINGLE, size: 3, color: "CCCCCC" },
+                        },
+                    }),
+                    
+                    new Paragraph({
+                        text: "",
+                        spacing: { before: 1200, after: 1200 },
+                    }),
+                    
+                    // Generate content for each role
+                    ...ROLES.flatMap((role, roleIndex) => {
+                        const sections = roleSections[role];
+                        const roleColors = {
+                            'Admin': '#8B5CF6',
+                            'PM': '#3B82F6', 
+                            'CM': '#14B8A6',
+                            'Supervisor': '#F59E0B',
+                            'MD / CD / GM': '#6366F1'
+                        };
+                        
+                        return [
+                            new Paragraph({
+                                children: [
+                                    new TextRun({
+                                        text: `${role} Role`,
+                                        size: 36,
+                                        bold: true,
+                                        color: "FFFFFF",
+                                        font: "Sarabun",
+                                    }),
+                                ],
+                                alignment: AlignmentType.CENTER,
+                                spacing: { before: 400, after: 300 },
+                                shading: {
+                                    type: ShadingType.SOLID,
+                                    color: roleColors[role as keyof typeof roleColors]?.replace('#', '') || "2E86AB",
+                                },
+                            }),
+                            ...sections.flatMap(section => [
+                                new Paragraph({
+                                    children: [
+                                        new TextRun({
+                                            text: `📋 ${section.menu}`,
+                                            size: 28,
+                                            bold: true,
+                                            color: "2E86AB",
+                                            font: "Sarabun",
+                                        }),
+                                    ],
+                                    spacing: { before: 300, after: 100 },
+                                    border: {
+                                        bottom: {
+                                            style: BorderStyle.SINGLE,
+                                            size: 6,
+                                            color: "2E86AB",
+                                        },
+                                    },
+                                }),
+                                new Paragraph({
+                                    children: [
+                                        new TextRun({
+                                            text: `👥 ผู้ใช้งาน: ${section.who}`,
+                                            size: 22,
+                                            italics: true,
+                                            color: "666666",
+                                            font: "Sarabun",
+                                        }),
+                                    ],
+                                    spacing: { after: 200 },
+                                }),
+                                ...section.steps.map(step => [
+                                    new Table({
+                                        width: { size: 100, type: WidthType.PERCENTAGE },
+                                        rows: [
+                                            new TableRow({
+                                                children: [
+                                                    new TableCell({
+                                                        children: [
+                                                            new Paragraph({
+                                                                children: [
+                                                                    new TextRun({
+                                                                        text: step.step.toString(),
+                                                                        size: 28,
+                                                                        bold: true,
+                                                                        color: "FFFFFF",
+                                                                        font: "Sarabun",
+                                                                    }),
+                                                                ],
+                                                                alignment: AlignmentType.CENTER,
+                                                            }),
+                                                        ],
+                                                        shading: {
+                                                            type: ShadingType.SOLID,
+                                                            color: roleColors[role as keyof typeof roleColors]?.replace('#', '') || "2E86AB",
+                                                        },
+                                                        width: { size: 10, type: WidthType.PERCENTAGE },
+                                                    }),
+                                                    new TableCell({
+                                                        children: [
+                                                            new Paragraph({
+                                                                children: [
+                                                                    new TextRun({
+                                                                        text: step.title,
+                                                                        size: 26,
+                                                                        bold: true,
+                                                                        color: "2E2E2E",
+                                                                        font: "Sarabun",
+                                                                    }),
+                                                                ],
+                                                                spacing: { after: 100 },
+                                                            }),
+                                                            new Paragraph({
+                                                                children: [
+                                                                    new TextRun({
+                                                                        text: step.desc,
+                                                                        size: 24,
+                                                                        color: "444444",
+                                                                        font: "Sarabun",
+                                                                    }),
+                                                                ],
+                                                                spacing: { after: step.tip ? 100 : 0 },
+                                                            }),
+                                                            ...(step.tip ? [
+                                                                new Paragraph({
+                                                                    children: [
+                                                                        new TextRun({
+                                                                            text: "💡 เคล็ดลับ: ",
+                                                                            bold: true,
+                                                                            color: "F59E0B",
+                                                                            size: 22,
+                                                                            font: "Sarabun",
+                                                                        }),
+                                                                        new TextRun({
+                                                                            text: step.tip,
+                                                                            italics: true,
+                                                                            color: "666666",
+                                                                            size: 22,
+                                                                            font: "Sarabun",
+                                                                        }),
+                                                                    ],
+                                                                    shading: {
+                                                                        type: ShadingType.SOLID,
+                                                                        color: "FEF3C7",
+                                                                    },
+                                                                }),
+                                                            ] : []),
+                                                        ],
+                                                        width: { size: 90, type: WidthType.PERCENTAGE },
+                                                        margins: {
+                                                            top: 200,
+                                                            bottom: 200,
+                                                            left: 200,
+                                                            right: 200,
+                                                        },
+                                                    }),
+                                                ],
+                                            }),
+                                        ],
+                                        borders: {
+                                            top: { style: BorderStyle.SINGLE, size: 6, color: "DDDDDD" },
+                                            bottom: { style: BorderStyle.SINGLE, size: 6, color: "DDDDDD" },
+                                            left: { style: BorderStyle.SINGLE, size: 6, color: "DDDDDD" },
+                                            right: { style: BorderStyle.SINGLE, size: 6, color: "DDDDDD" },
+                                        },
+                                        margins: {
+                                            top: 100,
+                                            bottom: 200,
+                                        },
+                                    }),
+                                ]).flat(),
+                            ]).flat(),
+                            ...(roleIndex < ROLES.length - 1 ? [new Paragraph({
+                                text: "",
+                                spacing: { before: 1200, after: 1200 },
+                            })] : []),
+                        ];
+                    }),
+                    
+                    new Paragraph({
+                        text: "",
+                        spacing: { before: 1200, after: 1200 },
+                    }),
+                    
+                    // Notification Guide
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: "🔔 ระบบแจ้งเตือน (กระดิ่ง)",
+                                size: 36,
+                                bold: true,
+                                color: "FFFFFF",
+                                font: "Sarabun",
+                            }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 400, after: 300 },
+                        shading: {
+                            type: ShadingType.SOLID,
+                            color: "F59E0B",
+                        },
+                    }),
+                    
+                    new Table({
+                        width: { size: 100, type: WidthType.PERCENTAGE },
+                        rows: [
+                            {
+                                color: "22C55E",
+                                text: "สีเขียว — SWO ใหม่ถูก Assign ให้ท่าน (Supervisor)"
+                            },
+                            {
+                                color: "EAB308",
+                                text: "สีเหลือง — Daily Report รอการอนุมัติ (CM / PM)"
+                            },
+                            {
+                                color: "3B82F6",
+                                text: "สีน้ำเงิน — Daily Report รอ PM Final Approve"
+                            },
+                            {
+                                color: "F97316",
+                                text: "สีส้ม — SWO รอ Review (PM / CD / MD Closure)"
+                            },
+                            {
+                                color: "EF4444",
+                                text: "สีแดง — คำขอหรือรายงานถูก Reject"
+                            },
+                        ].map(item => 
+                            new TableRow({
+                                children: [
+                                    new TableCell({
+                                        children: [
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({
+                                                        text: "●",
+                                                        size: 36,
+                                                        color: item.color,
+                                                        font: "Sarabun",
+                                                    }),
+                                                ],
+                                                alignment: AlignmentType.CENTER,
+                                            }),
+                                        ],
+                                        width: { size: 10, type: WidthType.PERCENTAGE },
+                                    }),
+                                    new TableCell({
+                                        children: [
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({
+                                                        text: item.text,
+                                                        size: 24,
+                                                        font: "Sarabun",
+                                                    }),
+                                                ],
+                                            }),
+                                        ],
+                                        width: { size: 90, type: WidthType.PERCENTAGE },
+                                    }),
+                                ],
+                            })
+                        ),
+                        borders: {
+                            top: { style: BorderStyle.SINGLE, size: 6, color: "DDDDDD" },
+                            bottom: { style: BorderStyle.SINGLE, size: 6, color: "DDDDDD" },
+                            left: { style: BorderStyle.SINGLE, size: 6, color: "DDDDDD" },
+                            right: { style: BorderStyle.SINGLE, size: 6, color: "DDDDDD" },
+                            insideHorizontal: { style: BorderStyle.SINGLE, size: 3, color: "EEEEEE" },
+                            insideVertical: { style: BorderStyle.SINGLE, size: 3, color: "EEEEEE" },
+                        },
+                    }),
+                    
+                    new Paragraph({
+                        text: "",
+                        spacing: { after: 400 },
+                    }),
+                    
+                    // Workflow Overview
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: "🔄 Flow การทำงานหลัก (SWO → Closure)",
+                                size: 36,
+                                bold: true,
+                                color: "FFFFFF",
+                                font: "Sarabun",
+                            }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 400, after: 300 },
+                        shading: {
+                            type: ShadingType.SOLID,
+                            color: "6366F1",
+                        },
+                    }),
+                    
+                    new Table({
+                        width: { size: 100, type: WidthType.PERCENTAGE },
+                        rows: [
+                            {
+                                step: "1",
+                                title: "PM/CM สร้าง SWO",
+                                color: "22C55E"
+                            },
+                            {
+                                step: "2", 
+                                title: "Supervisor รับงาน",
+                                color: "3B82F6"
+                            },
+                            {
+                                step: "3",
+                                title: "Supervisor ส่ง Daily Report", 
+                                color: "F59E0B"
+                            },
+                            {
+                                step: "4",
+                                title: "CM/PM อนุมัติรายงาน",
+                                color: "14B8A6"
+                            },
+                            {
+                                step: "5",
+                                title: "Supervisor ขอปิด SWO",
+                                color: "8B5CF6"
+                            },
+                            {
+                                step: "6",
+                                title: "PM → CD → MD อนุมัติปิด",
+                                color: "EF4444"
+                            },
+                            {
+                                step: "7",
+                                title: "SWO Closed ✓",
+                                color: "6B7280"
+                            },
+                        ].map(item => 
+                            new TableRow({
+                                children: [
+                                    new TableCell({
+                                        children: [
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({
+                                                        text: item.step,
+                                                        size: 28,
+                                                        bold: true,
+                                                        color: "FFFFFF",
+                                                        font: "Sarabun",
+                                                    }),
+                                                ],
+                                                alignment: AlignmentType.CENTER,
+                                            }),
+                                        ],
+                                        shading: {
+                                            type: ShadingType.SOLID,
+                                            color: item.color,
+                                        },
+                                        width: { size: 15, type: WidthType.PERCENTAGE },
+                                    }),
+                                    new TableCell({
+                                        children: [
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({
+                                                        text: item.title,
+                                                        size: 26,
+                                                        bold: true,
+                                                        color: "2E2E2E",
+                                                        font: "Sarabun",
+                                                    }),
+                                                ],
+                                            }),
+                                        ],
+                                        width: { size: 85, type: WidthType.PERCENTAGE },
+                                        margins: {
+                                            top: 150,
+                                            bottom: 150,
+                                            left: 200,
+                                            right: 200,
+                                        },
+                                    }),
+                                ],
+                            })
+                        ),
+                        borders: {
+                            top: { style: BorderStyle.SINGLE, size: 6, color: "6366F1" },
+                            bottom: { style: BorderStyle.SINGLE, size: 6, color: "6366F1" },
+                            left: { style: BorderStyle.SINGLE, size: 6, color: "6366F1" },
+                            right: { style: BorderStyle.SINGLE, size: 6, color: "6366F1" },
+                            insideHorizontal: { style: BorderStyle.SINGLE, size: 3, color: "CCCCCC" },
+                            insideVertical: { style: BorderStyle.SINGLE, size: 3, color: "CCCCCC" },
+                        },
+                    }),
+                    
+                    new Paragraph({
+                        text: "",
+                        spacing: { after: 600 },
+                    }),
+                    
+                    // Footer
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: `📅 สร้างเมื่อ: ${new Date().toLocaleDateString('th-TH', { 
+                                    year: 'numeric', 
+                                    month: 'long', 
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                })}`,
+                                size: 22,
+                                italics: true,
+                                color: "666666",
+                                font: "Sarabun",
+                            }),
+                        ],
+                        alignment: AlignmentType.RIGHT,
+                        spacing: { before: 400 },
+                        border: {
+                            top: {
+                                style: BorderStyle.SINGLE,
+                                size: 3,
+                                color: "CCCCCC",
+                            },
+                        },
+                    }),
+                    
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: "© CMG Construction Control - User Manual v2.0",
+                                size: 20,
+                                color: "999999",
+                                font: "Sarabun",
+                            }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 200 },
+                    }),
+                ],
+            },
+        ],
+    });
+
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `CMG_Tracker_Manual_${new Date().toISOString().split('T')[0]}.docx`);
+};
+
 export const UserManualModal: React.FC<UserManualModalProps> = ({ isOpen, onClose, currentRole }) => {
     const getDefaultTab = (): ManualRole => {
         if (currentRole === 'Admin') return 'Admin';
@@ -318,9 +1088,19 @@ export const UserManualModal: React.FC<UserManualModalProps> = ({ isOpen, onClos
                             <p className="text-blue-200 text-xs mt-0.5">User Manual — เลือก Role เพื่อดูขั้นตอน</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors">
-                        <X className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button 
+                            onClick={generateWordDocument}
+                            className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
+                            title="ดาวน์โหลดคู่มือเป็นไฟล์ Word"
+                        >
+                            <Download className="w-4 h-4" />
+                            ดาวน์โหลด Word
+                        </button>
+                        <button onClick={onClose} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Role Tabs */}
@@ -464,7 +1244,7 @@ export const UserManualModal: React.FC<UserManualModalProps> = ({ isOpen, onClos
 
                 {/* Footer */}
                 <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
-                    <p className="text-xs text-gray-400">CMG Construction Control — User Manual v1.0</p>
+                    <p className="text-xs text-gray-400">CMG Construction Control — User Manual v2.0 (อัพเดท: {new Date().toLocaleDateString('th-TH')})</p>
                     <button onClick={onClose} className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
                         ปิด
                     </button>

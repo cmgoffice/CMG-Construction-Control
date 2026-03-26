@@ -91,6 +91,9 @@ export const DailyReportManager = () => {
 
     // Date filter state (declared early because swoList computation depends on it)
     const [selectedDateFilter, setSelectedDateFilter] = useState<string>('');
+    
+    // Get unique dates from daily reports for the main date filter dropdown
+    const availableDates = Array.from(new Set(dailyReports.map(r => r.date).filter(Boolean))).sort((a, b) => b.localeCompare(a)); // Sort dates descending (newest first)
 
     // Format SWO List Data for the table
     // When date filter is active, scope data to reports ON OR BEFORE that date
@@ -152,6 +155,8 @@ export const DailyReportManager = () => {
 
     const filteredByUser = swoList.filter(swo => {
         if (!user) return false;
+        // Exclude SWOs with Draft status from the table
+        if (swo.status === 'Draft') return false;
         if (user.role === 'Admin' || user.role === 'MD' || user.role === 'GM' || user.role === 'CD') return true;
         if (user.role === 'Supervisor') return swo.supervisor_name === (user as any).name;
         return user.assigned_projects?.includes(swo.project_id_raw);
@@ -167,8 +172,11 @@ export const DailyReportManager = () => {
     const visibleSwoList = filteredByUser.filter(swo => {
         const matchProject = selectedProjectFilter === 'All' || swo.project_no === selectedProjectFilter;
         const matchSupervisor = selectedSupervisorFilter === 'All' || swo.supervisor === selectedSupervisorFilter;
-        // Date filter: show SWOs that have ANY daily report on the selected date
-        const matchDate = !selectedDateFilter || dailyReports.some(r => r.swo_id === swo.id && r.date === selectedDateFilter);
+        // Date filter: show SWOs that have ANY daily report on the selected date OR SWOs with no reports (Draft status)
+        const hasReports = dailyReports.some(r => r.swo_id === swo.id);
+        const matchDate = !selectedDateFilter || 
+                         dailyReports.some(r => r.swo_id === swo.id && r.date === selectedDateFilter) ||
+                         !hasReports; // Include SWOs with no reports (Draft status)
         return matchProject && matchSupervisor && matchDate;
     });
 
@@ -262,12 +270,16 @@ export const DailyReportManager = () => {
                     {/* Date Filter */}
                     <div className="flex items-center gap-2">
                         <label className="text-sm font-medium text-gray-700 whitespace-nowrap">📅 Date:</label>
-                        <input
-                            type="date"
+                        <select
                             className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 outline-none font-medium"
                             value={selectedDateFilter}
                             onChange={(e) => setSelectedDateFilter(e.target.value)}
-                        />
+                        >
+                            <option value="">All Dates</option>
+                            {availableDates.map(date => (
+                                <option key={date} value={date}>{date}</option>
+                            ))}
+                        </select>
                         {selectedDateFilter && (
                             <button
                                 onClick={() => setSelectedDateFilter('')}
@@ -355,7 +367,7 @@ export const DailyReportManager = () => {
                                                     </span>
                                                 </div>
                                                 <div className="flex flex-wrap gap-1.5 mt-2">
-                                                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${item.closure_status ? 'text-red-700 bg-red-50' : item.status === 'Accepted' ? 'text-green-600 bg-green-50' : item.status === 'Assigned' ? 'text-blue-600 bg-blue-50' : item.status === 'Request Change' ? 'text-orange-600 bg-orange-50' : 'text-gray-600 bg-gray-100'}`}>
+                                                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${item.closure_status ? 'text-red-700 bg-red-50' : item.status === 'Accepted' ? 'text-green-600 bg-green-50' : item.status === 'Assigned' ? 'text-blue-600 bg-blue-50' : item.status === 'Request Change' ? 'text-orange-600 bg-orange-50' : item.status === 'Draft' ? 'text-purple-600 bg-purple-50' : 'text-gray-600 bg-gray-100'}`}>
                                                         {item.closure_status ? `Closed - ${item.closure_status}` : item.status}
                                                     </span>
                                                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${getStatusBadge(item.task_status)}`}>{item.task_status}</span>
@@ -718,20 +730,72 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
     })();
     const [selectedDate, setSelectedDate] = useState(initialDate || todayStr);
 
+    // Fetch all daily reports for this SWO to get available dates
+    const [allSwoReports, setAllSwoReports] = useState<any[]>([]);
+    React.useEffect(() => {
+        const q = query(
+            col("daily_reports"),
+            where("swo_id", "==", swo.id)
+        );
+        const unsub = onSnapshot(q, (snapshot) => {
+            const reports = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            setAllSwoReports(reports);
+        });
+        return unsub;
+    }, [swo.id]);
+
+    // Get available dates with reports, sorted
+    const availableReportDates = Array.from(new Set(allSwoReports.map(r => r.date).filter(Boolean))).sort();
+
     const goToPrevDay = () => {
-        const d = new Date(selectedDate + 'T00:00:00');
-        d.setDate(d.getDate() - 1);
-        setSelectedDate(toLocalDateStr(d));
-    };
-    const goToNextDay = () => {
-        const d = new Date(selectedDate + 'T00:00:00');
-        d.setDate(d.getDate() + 1);
-        setSelectedDate(toLocalDateStr(d));
+        const currentIndex = availableReportDates.indexOf(selectedDate);
+        if (currentIndex > 0) {
+            setSelectedDate(availableReportDates[currentIndex - 1]);
+        } else if (currentIndex === -1 && availableReportDates.length > 0) {
+            // If current date is not in available dates, go to the latest available date before current
+            const earlierDates = availableReportDates.filter(date => date < selectedDate);
+            if (earlierDates.length > 0) {
+                setSelectedDate(earlierDates[earlierDates.length - 1]);
+            }
+        }
     };
 
-    // Next: only up to today. Prev: allowed so Supervisor can open rejected reports on past dates.
-    const canGoPrevDay = true;
-    const canGoNextDay = selectedDate < todayStr;
+    const goToNextDay = () => {
+        const currentIndex = availableReportDates.indexOf(selectedDate);
+        if (currentIndex >= 0 && currentIndex < availableReportDates.length - 1) {
+            setSelectedDate(availableReportDates[currentIndex + 1]);
+        } else if (currentIndex === -1 && availableReportDates.length > 0) {
+            // If current date is not in available dates, go to the earliest available date after current
+            const laterDates = availableReportDates.filter(date => date > selectedDate && date <= todayStr);
+            if (laterDates.length > 0) {
+                setSelectedDate(laterDates[0]);
+            }
+        }
+    };
+
+    // Navigation constraints: only allow navigation to dates with actual reports
+    const canGoPrevDay = (() => {
+        const currentIndex = availableReportDates.indexOf(selectedDate);
+        if (currentIndex > 0) return true;
+        if (currentIndex === -1) {
+            const earlierDates = availableReportDates.filter(date => date < selectedDate);
+            return earlierDates.length > 0;
+        }
+        return false;
+    })();
+
+    const canGoNextDay = (() => {
+        const currentIndex = availableReportDates.indexOf(selectedDate);
+        if (currentIndex >= 0 && currentIndex < availableReportDates.length - 1) {
+            const nextDate = availableReportDates[currentIndex + 1];
+            return nextDate <= todayStr;
+        }
+        if (currentIndex === -1) {
+            const laterDates = availableReportDates.filter(date => date > selectedDate && date <= todayStr);
+            return laterDates.length > 0;
+        }
+        return false;
+    })();
 
     // Rejected report: editable for 2 days from rejected_at (Supervisor only)
     const isRejectedWithinTwoDays = (report: any): boolean => {
@@ -1649,11 +1713,18 @@ export const ApprovalDashboard = () => {
     const uniqueSupervisors = Array.from(new Set(reports.map(r => r.supervisor || r.supervisor_name).filter(Boolean)));
     const uniqueProjects = Array.from(new Set(reports.map(r => r.project_no).filter(Boolean)));
     const uniqueSwos = Array.from(new Set(reports.map(r => r.swo).filter(Boolean)));
+    const uniqueDates = Array.from(new Set(reports.map(r => r.date).filter(Boolean))).sort((a, b) => b.localeCompare(a)); // Sort dates descending (newest first)
 
+    // Debug: Count reports by status
+    const reportsByStatus = reports.reduce((acc, r) => {
+        acc[r.status] = (acc[r.status] || 0) + 1;
+        return acc;
+    }, {} as Record<string, number>);
+    
     // Filter reports based on tab and filters
     const filteredReports = reports.filter(r => {
         // Tab filter
-        const isPending = r.status === 'Pending CM' || r.status === 'Pending PM' || r.status === 'Rejected';
+        const isPending = r.status === 'Pending CM' || r.status === 'Pending PM';
         const isApproved = r.status === 'Approved';
         if (activeTab === 'pending' && !isPending) return false;
         if (activeTab === 'approved' && !isApproved) return false;
@@ -1912,18 +1983,28 @@ export const ApprovalDashboard = () => {
                 <div className="flex border-b border-gray-200 bg-gray-50 shrink-0">
                     <button
                         onClick={() => setInboxSection('reports')}
-                        className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors ${inboxSection === 'reports' ? 'text-blue-600 border-b-2 border-blue-600 bg-white' : 'text-gray-500 hover:bg-gray-100'}`}
+                        className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${inboxSection === 'reports' ? 'text-blue-600 border-b-2 border-blue-600 bg-white' : 'text-gray-500 hover:bg-gray-100'}`}
                     >
                         Daily Reports
+                        {(() => {
+                            const pendingCount = reports.filter(r => r.status === 'Pending CM' || r.status === 'Pending PM').length;
+                            return pendingCount > 0 && (
+                                <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[16px] h-4 flex items-center justify-center">
+                                    {pendingCount}
+                                </span>
+                            );
+                        })()}
                     </button>
                     <button
                         onClick={() => setInboxSection('changes')}
-                        className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors ${inboxSection === 'changes' ? 'text-amber-600 border-b-2 border-amber-600 bg-white' : 'text-gray-500 hover:bg-gray-100'}`}
+                        className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${inboxSection === 'changes' ? 'text-amber-600 border-b-2 border-amber-600 bg-white' : 'text-gray-500 hover:bg-gray-100'}`}
                     >
                         Change Requests
-                        <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${inboxSection === 'changes' ? 'bg-amber-100 text-amber-700' : 'bg-gray-200 text-gray-600'}`}>
-                            {pendingChangeRequests.length}
-                        </span>
+                        {pendingChangeRequests.length > 0 && (
+                            <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[16px] h-4 flex items-center justify-center">
+                                {pendingChangeRequests.length}
+                            </span>
+                        )}
                     </button>
                 </div>
 
@@ -1944,7 +2025,7 @@ export const ApprovalDashboard = () => {
                         >
                             Pending
                             <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${activeTab === 'pending' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}`}>
-                                {reports.filter(r => r.status === 'Pending CM' || r.status === 'Pending PM' || r.status === 'Rejected').length}
+                                {reports.filter(r => r.status === 'Pending CM' || r.status === 'Pending PM').length}
                             </span>
                         </button>
                         <button
@@ -1971,12 +2052,16 @@ export const ApprovalDashboard = () => {
                         {/* Date Filter */}
                         <div>
                             <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Date</label>
-                            <input
-                                type="date"
+                            <select
                                 className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                                 value={filterDate}
                                 onChange={(e) => setFilterDate(e.target.value)}
-                            />
+                            >
+                                <option value="">All Dates</option>
+                                {uniqueDates.map(date => (
+                                    <option key={date} value={date}>{date}</option>
+                                ))}
+                            </select>
                         </div>
                         {/* SWO Filter */}
                         <div>

@@ -178,6 +178,9 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
   const prevCountRef = useRef<number | null>(null);
   const didMountRef = useRef(false);
   const [pendingUserCount, setPendingUserCount] = useState(0);
+  const [pendingReportsCount, setPendingReportsCount] = useState(0);
+  const [pendingChangeRequestsCount, setPendingChangeRequestsCount] = useState(0);
+  const [pendingClosuresCount, setPendingClosuresCount] = useState(0);
   const [manualOpen, setManualOpen] = useState(false);
 
   // Menu navigation logging removed as per requirement
@@ -195,6 +198,87 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
     });
     return unsub;
   }, [user?.role]);
+
+  // Fetch pending reports count for sidebar notification
+  useEffect(() => {
+    const canSeeApprovals = ['Admin', 'MD', 'PM', 'CM'].includes(user?.role || '');
+    if (!canSeeApprovals) return;
+    
+    const q = query(col('daily_reports'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const reports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      const filtered = (user?.role === 'Admin' || user?.role === 'MD')
+        ? reports
+        : reports.filter((r: any) => (user as any)?.assigned_projects?.includes(r.project_id));
+      
+      const pendingCount = filtered.filter((r: any) => r.status === 'Pending CM' || r.status === 'Pending PM').length;
+      setPendingReportsCount(pendingCount);
+    });
+    return unsub;
+  }, [user?.role, user?.assigned_projects]);
+
+  // Fetch pending change requests count for sidebar notification
+  useEffect(() => {
+    const canSeeApprovals = ['Admin', 'MD', 'PM', 'CM'].includes(user?.role || '');
+    if (!canSeeApprovals) return;
+    
+    const q = query(col('swo_change_requests'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      const filtered = (user?.role === 'Admin' || user?.role === 'MD')
+        ? requests
+        : requests.filter((r: any) => (user as any)?.assigned_projects?.includes(r.project_id));
+      
+      const pendingCount = filtered.filter((r: any) => r.status === 'Pending CM' || r.status === 'Pending PM').length;
+      setPendingChangeRequestsCount(pendingCount);
+    });
+    return unsub;
+  }, [user?.role, user?.assigned_projects]);
+
+  // Fetch pending SWO closures count for sidebar notification
+  useEffect(() => {
+    if (!user) return;
+    
+    const q = query(col('site_work_orders'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const swos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      
+      let pendingCount = 0;
+      
+      swos.forEach((swo: any) => {
+        const cs = swo.closure_status;
+        
+        // PM sees SWOs in their projects that need PM review
+        if (user.role === 'PM') {
+          const inMyProjects = user.assigned_projects?.includes(swo.project_id);
+          if (inMyProjects && cs === 'PM Review') {
+            pendingCount++;
+          }
+        }
+        // CD sees SWOs that need CD review
+        else if (user.role === 'CD') {
+          if (cs === 'CD Review') {
+            pendingCount++;
+          }
+        }
+        // MD sees SWOs that need MD review
+        else if (user.role === 'MD') {
+          if (cs === 'MD Review') {
+            pendingCount++;
+          }
+        }
+        // Admin sees all pending closure tasks
+        else if (user.role === 'Admin') {
+          if (cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review') {
+            pendingCount++;
+          }
+        }
+      });
+      
+      setPendingClosuresCount(pendingCount);
+    });
+    return unsub;
+  }, [user?.role, user?.assigned_projects]);
 
   // Persist sidebar collapse state
   useEffect(() => {
@@ -305,15 +389,35 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
           </Link>
 
           {['Admin', 'MD', 'PM', 'CM'].includes(user?.role || '') && (
-            <Link to="/approvals" className={navLinkClass('/approvals')} title="Approvals">
-              <ShieldAlert className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
+            <Link to="/approvals" className={`${navLinkClass('/approvals')} relative`} title="Approvals">
+              <span className="relative inline-flex">
+                <ShieldAlert className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
+                {(pendingReportsCount + pendingChangeRequestsCount) > 0 && sidebarCollapsed && (
+                  <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 flex items-center justify-center bg-red-500 text-white text-[9px] font-bold rounded-full animate-pulse" title={`${pendingReportsCount + pendingChangeRequestsCount} รออนุมัติ`} />
+                )}
+              </span>
               <span className={sidebarCollapsed ? 'md:hidden' : ''}>Approvals</span>
+              {(pendingReportsCount + pendingChangeRequestsCount) > 0 && !sidebarCollapsed && (
+                <span className="ml-auto min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-red-500 text-white text-[11px] font-bold rounded-full animate-pulse">
+                  {(pendingReportsCount + pendingChangeRequestsCount) > 99 ? '99+' : (pendingReportsCount + pendingChangeRequestsCount)}
+                </span>
+              )}
             </Link>
           )}
 
-          <Link to="/closures" className={navLinkClass('/closures')} title="Closures">
-            <ShieldAlert className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
+          <Link to="/closures" className={`${navLinkClass('/closures')} relative`} title="Closures">
+            <span className="relative inline-flex">
+              <ShieldAlert className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
+              {pendingClosuresCount > 0 && sidebarCollapsed && (
+                <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 flex items-center justify-center bg-red-500 text-white text-[9px] font-bold rounded-full animate-pulse" title={`${pendingClosuresCount} รอดำเนินการ`} />
+              )}
+            </span>
             <span className={sidebarCollapsed ? 'md:hidden' : ''}>Closures</span>
+            {pendingClosuresCount > 0 && !sidebarCollapsed && (
+              <span className="ml-auto min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-red-500 text-white text-[11px] font-bold rounded-full animate-pulse">
+                {pendingClosuresCount > 99 ? '99+' : pendingClosuresCount}
+              </span>
+            )}
           </Link>
 
           {['Admin', 'MD', 'GM', 'CD', 'PM'].includes(user?.role || '') && (
