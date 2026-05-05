@@ -1116,6 +1116,7 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                 work_name: swo.work_name || '',
                 status: 'Pending CM' as const,
                 cm_notes: '',
+                created_at: new Date().toISOString(),
                 activities: activities.map((a: any) => ({ ...a, today: parseFloat(String(a.today)) || 0 })),
                 equipments,
                 workers,
@@ -1793,10 +1794,12 @@ export const ApprovalDashboard = () => {
             if (report.status === 'Pending CM') {
                 updateData.cm_notes = cmNotes;
                 updateData.cm_approved_by = user?.name || user?.role;
+                updateData.cm_approved_at = new Date().toISOString();
             }
             if (nextStatus === 'Approved') {
                 updateData.pm_notes = cmNotes;
                 updateData.pm_approved_by = user?.name || user?.role;
+                updateData.pm_approved_at = new Date().toISOString();
             }
             
             await updateDoc(docRef("daily_reports", report.id), updateData);

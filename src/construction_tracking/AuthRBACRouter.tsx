@@ -1,6 +1,6 @@
 import React, { useState, ReactNode, useRef, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
-import { ShieldAlert, LogOut, Menu, UserCircle, Briefcase, FileText, BarChart3, Shield, User, Bell, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ShieldAlert, LogOut, Menu, UserCircle, Briefcase, FileText, BarChart3, Shield, User, Bell, BookOpen, ChevronLeft, ChevronRight, GitBranch } from 'lucide-react';
 import { UserManualModal } from './UserManual';
 import { useNotifications, NotificationItem } from './useNotifications';
 
@@ -16,6 +16,7 @@ import SWOCreationForm from './SWOCreationForm';
 import { DailyReportManager, ApprovalDashboard } from './DailyReportWorkflow';
 import { SWOCloseWorkflow } from './ClosureWorkflows';
 import ExecutiveDashboards from './ExecutiveDashboards';
+import SWOWorkflow from './SWOWorkflow';
 import { onSnapshot, query, updateDoc } from 'firebase/firestore';
 import { col, docRef, logActivity } from './firebase';
 
@@ -427,6 +428,11 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
             </Link>
           )}
 
+          <Link to="/workflow" className={navLinkClass('/workflow')} title="Instruction Work Flow">
+            <GitBranch className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
+            <span className={sidebarCollapsed ? 'md:hidden' : ''}>Instruction Work Flow</span>
+          </Link>
+
           {(user?.role === 'Admin' || (user?.role as string) === 'Administrator') && (
             <>
               <div className={`mx-4 my-4 border-t border-gray-200 ${sidebarCollapsed ? 'md:mx-2' : ''}`} />
@@ -730,6 +736,14 @@ export const AuthRBACRouter = () => {
             <ProtectedRoute allowedRoles={['Admin', 'MD', 'GM', 'CD', 'PM']}>
               <Layout>
                 <ExecutiveDashboards />
+              </Layout>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/workflow" element={
+            <ProtectedRoute>
+              <Layout>
+                <SWOWorkflow />
               </Layout>
             </ProtectedRoute>
           } />
