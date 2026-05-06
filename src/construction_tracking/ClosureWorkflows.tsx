@@ -281,8 +281,9 @@ const SupervisorRejectionModal = ({ isOpen, onClose, swoData, onResubmit, onCanc
 };
 
 // --- Propose Detail Site Work Completed Modal ---
-const ProposeDetailModal = ({ isOpen, onClose, swoData, onPmAccept, onPmReject, onCdAccept, onCdReject, onMdAccept, onMdReject }: any) => {
+const ProposeDetailModal = ({ isOpen, onClose, swoData, onCmAccept, onCmReject, onPmAccept, onPmReject, onCdAccept, onCdReject, onMdAccept, onMdReject }: any) => {
     const { user } = useAuth();
+    const [cmNote, setCmNote] = useState('');
     const [pmNote, setPmNote] = useState('');
     const [pmQuality, setPmQuality] = useState('');
     const [pmOnTime, setPmOnTime] = useState<'Yes' | 'No' | null>(null);
@@ -290,12 +291,13 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onPmAccept, onPmReject, 
     const [cdNote, setCdNote] = useState('');
     const [rejectReason, setRejectReason] = useState('');
     const [showRejectInput, setShowRejectInput] = useState(false);
-    const [rejectTarget, setRejectTarget] = useState<'PM' | 'CD' | 'MD' | null>(null);
+    const [rejectTarget, setRejectTarget] = useState<'CM' | 'PM' | 'CD' | 'MD' | null>(null);
     const [reports, setReports] = useState<any[]>([]);
     const [viewingReport, setViewingReport] = useState<any | null>(null);
 
     useEffect(() => {
         if (swoData) {
+            setCmNote(swoData.cm_closure_note || '');
             setPmNote(swoData.pm_closure_note || '');
             setPmQuality(swoData.quality_score || '');
             setPmOnTime(swoData.on_time || null);
@@ -321,11 +323,12 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onPmAccept, onPmReject, 
 
     if (!isOpen || !swoData) return null;
 
-    const status = swoData.status;
+    const status = swoData.closure_status || swoData.status;
+    const isCmEditable = user?.role === 'CM' && status === 'CM Review';
     const isPmEditable = user?.role === 'PM' && status === 'PM Review';
     const isCdEditable = user?.role === 'CD' && status === 'CD Review';
     const isMdEditable = user?.role === 'MD' && status === 'MD Review';
-    const isViewOnly = status === 'Closed SWO' || (!isPmEditable && !isCdEditable && !isMdEditable);
+    const isViewOnly = status === 'Closed SWO' || (!isCmEditable && !isPmEditable && !isCdEditable && !isMdEditable);
 
     let actualFinishDate = 'ยังไม่มีรายงาน';
     let delayDays = 0;
@@ -337,13 +340,14 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onPmAccept, onPmReject, 
         }
     }
 
-    const handleRejectClick = (target: 'PM' | 'CD' | 'MD') => {
+    const handleRejectClick = (target: 'CM' | 'PM' | 'CD' | 'MD') => {
         setRejectTarget(target);
         setShowRejectInput(true);
     };
 
     const handleConfirmReject = () => {
         if (!rejectTarget) return;
+        if (rejectTarget === 'CM') onCmReject(rejectReason);
         if (rejectTarget === 'PM') onPmReject(rejectReason);
         if (rejectTarget === 'CD') onCdReject(cdNote, rejectReason);
         if (rejectTarget === 'MD') onMdReject(rejectReason);
@@ -352,7 +356,7 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onPmAccept, onPmReject, 
     };
 
     // Flow status indicator
-    const flowSteps = ['PM Review', 'CD Review', 'MD Review', 'Closed SWO'];
+    const flowSteps = ['CM Review', 'PM Review', 'CD Review', 'MD Review', 'Closed SWO'];
     const currentStepIdx = flowSteps.indexOf(status);
 
     return (
@@ -383,7 +387,16 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onPmAccept, onPmReject, 
                 </div>
 
                 {/* Reject reason banners */}
-                {swoData.cd_reject_reason && (status === 'PM Review') && (
+                {swoData.cm_reject_reason && (status === 'CM Review') && (
+                    <div className="mx-6 mt-4 bg-red-50 border-l-4 border-red-500 rounded-lg p-4 flex items-start gap-3">
+                        <XCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                        <div>
+                            <p className="font-bold text-red-700 text-sm">CM Rejected — เหตุผล:</p>
+                            <p className="text-red-600 text-sm mt-0.5">{swoData.cm_reject_reason}</p>
+                        </div>
+                    </div>
+                )}
+                {swoData.cd_reject_reason && (status === 'PM Review' || status === 'CM Review') && (
                     <div className="mx-6 mt-4 bg-red-50 border-l-4 border-red-500 rounded-lg p-4 flex items-start gap-3">
                         <XCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                         <div>
@@ -392,7 +405,7 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onPmAccept, onPmReject, 
                         </div>
                     </div>
                 )}
-                {swoData.md_reject_reason && (status === 'PM Review') && (
+                {swoData.md_reject_reason && (status === 'PM Review' || status === 'CM Review') && (
                     <div className="mx-6 mt-4 bg-red-50 border-l-4 border-red-500 rounded-lg p-4 flex items-start gap-3">
                         <XCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                         <div>
@@ -438,6 +451,23 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onPmAccept, onPmReject, 
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* CM Section */}
+                        {(status === 'CM Review' || status === 'PM Review' || status === 'CD Review' || status === 'MD Review' || status === 'Closed SWO') && (
+                            <div className="bg-white p-5 rounded-xl border border-green-200 shadow-sm space-y-3">
+                                <h3 className="text-base font-bold text-gray-900 border-b pb-2 flex items-center gap-2">
+                                    <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 text-xs font-bold flex items-center justify-center">CM</span>
+                                    CM Evaluation
+                                    {status !== 'CM Review' && status !== 'Closed SWO' && <span className="ml-auto text-xs text-green-600 font-normal bg-green-50 px-2 py-0.5 rounded-full">✓ Reviewed</span>}
+                                </h3>
+                                <div className="space-y-1">
+                                    <label className="text-sm font-semibold text-gray-700">CM Note/Comment</label>
+                                    <textarea rows={4} className={`w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none ${!isCmEditable ? 'bg-gray-50 text-gray-600 border-gray-200' : 'bg-white border-green-300'}`}
+                                        placeholder={!isCmEditable ? 'No comment from CM' : 'Enter CM notes...'}
+                                        value={cmNote} onChange={(e) => setCmNote(e.target.value)} readOnly={!isCmEditable} />
+                                </div>
+                            </div>
+                        )}
+
                         {/* PM Section */}
                         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
                             <h3 className="text-base font-bold text-gray-900 border-b pb-2 flex items-center gap-2">
@@ -485,7 +515,7 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onPmAccept, onPmReject, 
                         {/* CD + MD Section + Past Reports */}
                         <div className="space-y-4 flex flex-col">
                             {/* CD Note — visible when CD Review or beyond */}
-                            {(status === 'CD Review' || status === 'MD Review' || status === 'Closed SWO' || isCdEditable) && (
+                            {(status === 'CD Review' || status === 'MD Review' || status === 'Closed SWO' || isCdEditable || status === 'PM Review') && (
                                 <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                                     <h3 className="text-base font-bold text-gray-900 border-b pb-2 mb-3 flex items-center gap-2">
                                         <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">CD</span>
@@ -543,6 +573,17 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onPmAccept, onPmReject, 
                 {/* Footer Actions */}
                 <div className="p-5 border-t border-gray-200 bg-white flex flex-wrap justify-end gap-3 rounded-b-2xl">
                     <button onClick={onClose} className="px-5 py-2.5 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 font-medium">Close</button>
+
+                    {isCmEditable && !showRejectInput && (
+                        <>
+                            <button onClick={() => handleRejectClick('CM')} className="px-5 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 font-bold flex items-center gap-2">
+                                <XCircle className="w-4 h-4" /> Reject
+                            </button>
+                            <button onClick={() => onCmAccept(cmNote)} className="px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold shadow-sm flex items-center gap-2">
+                                <Check className="w-4 h-4" /> Accept → PM
+                            </button>
+                        </>
+                    )}
 
                     {isPmEditable && !showRejectInput && (
                         <>
@@ -628,16 +669,23 @@ export const SWOCloseWorkflow = () => {
 
             const visible = fetched.filter((swo: any) => {
                 if (!user) return false;
+                // CM sees SWOs in CM Review (and beyond) for their assigned projects
+                if (user.role === 'CM') {
+                    const inMyProjects = user.assigned_projects?.includes(swo.project_id);
+                    if (!inMyProjects) return false;
+                    const cs = swo.closure_status;
+                    return cs === 'CM Review' || cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
+                }
                 // PM sees only SWOs under their own projects that have been submitted for closure
                 if (user.role === 'PM') {
                     const inMyProjects = user.assigned_projects?.includes(swo.project_id);
                     if (!inMyProjects) return false;
                     const cs = swo.closure_status;
-                    return cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
+                    return cs === 'CM Review' || cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
                 }
                 if (user.role === 'Admin' || user.role === 'MD' || user.role === 'GM' || user.role === 'CD') {
                     const cs = swo.closure_status;
-                    return cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
+                    return cs === 'CM Review' || cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
                 }
                 if (user.role === 'Supervisor') {
                     // Include SWOs assigned to this supervisor: in closure flow, rejected, or active/cancelled (can request closure)
@@ -645,9 +693,9 @@ export const SWOCloseWorkflow = () => {
                     if (!isAssigned) return false;
                     
                     const cs = swo.closure_status;
-                    const isInClosureFlow = cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
-                    const isRejected = !cs && swo.pm_reject_reason;
-                    const isActiveOrCancelled = !cs; // no closure status = can request closure (including after cancel)
+                    const isInClosureFlow = cs === 'CM Review' || cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
+                    const isRejected = !cs && (swo.pm_reject_reason || swo.cm_reject_reason);
+                    const isActiveOrCancelled = !cs;
                     
                     return isInClosureFlow || isRejected || isActiveOrCancelled;
                 }
@@ -658,7 +706,7 @@ export const SWOCloseWorkflow = () => {
             const nonDraft = visible.filter((swo: any) => swo.status !== 'Draft');
 
             // Sort by closure urgency
-            const order: Record<string, number> = { 'PM Review': 1, 'CD Review': 2, 'MD Review': 3, 'Closed SWO': 4 };
+            const order: Record<string, number> = { 'CM Review': 1, 'PM Review': 2, 'CD Review': 3, 'MD Review': 4, 'Closed SWO': 5 };
             nonDraft.sort((a: any, b: any) =>
                 (order[a.closure_status] || 99) - (order[b.closure_status] || 99)
             );
@@ -672,6 +720,51 @@ export const SWOCloseWorkflow = () => {
     const notifyAndClose = (msg: string) => {
         setIsDetailModalOpen(false);
         showAlert('success', 'อัปเดตสำเร็จ', msg);
+    };
+
+    // CM Accept → PM Review
+    const handleCmAccept = async (note: string) => {
+        if (!selectedSwoForModal) return;
+        try {
+            await updateDoc(docRef("site_work_orders", selectedSwoForModal.id), {
+                closure_status: 'PM Review',
+                cm_closure_note: note,
+                cm_reject_reason: null,
+            });
+            if (user) {
+                await logActivity({
+                    uid: user.uid,
+                    name: user.name,
+                    role: user.role,
+                    action: 'Approve',
+                    menu: 'Closures',
+                    detail: `CM Approve Closure SWO No. ${selectedSwoForModal.swoNo}`
+                });
+            }
+            notifyAndClose('ส่งต่อให้ PM เรียบร้อยแล้ว');
+        } catch (e) { console.error(e); }
+    };
+
+    // CM Reject → closure_status = null (กลับ Supervisor)
+    const handleCmReject = async (reason: string) => {
+        if (!selectedSwoForModal) return;
+        try {
+            await updateDoc(docRef("site_work_orders", selectedSwoForModal.id), {
+                closure_status: null,
+                cm_reject_reason: reason,
+            });
+            if (user) {
+                await logActivity({
+                    uid: user.uid,
+                    name: user.name,
+                    role: user.role,
+                    action: 'Reject',
+                    menu: 'Closures',
+                    detail: `CM Reject Closure SWO No. ${selectedSwoForModal.swoNo} (Reason: ${reason})`
+                });
+            }
+            notifyAndClose('Reject แล้ว — SWO กลับไปยัง Supervisor');
+        } catch (e) { console.error(e); }
     };
 
     // PM Accept → CD Review
@@ -752,12 +845,12 @@ export const SWOCloseWorkflow = () => {
         } catch (e) { console.error(e); }
     };
 
-    // CD Reject → PM Review + reason
+    // CD Reject → CM Review + reason
     const handleCdReject = async (note: string, reason: string) => {
         if (!selectedSwoForModal) return;
         try {
             await updateDoc(docRef("site_work_orders", selectedSwoForModal.id), {
-                closure_status: 'PM Review',
+                closure_status: 'CM Review',
                 cd_closure_note: note,
                 cd_reject_reason: reason,
             });
@@ -799,12 +892,12 @@ export const SWOCloseWorkflow = () => {
         } catch (e) { console.error(e); }
     };
 
-    // MD Reject → PM Review + reason
+    // MD Reject → CM Review + reason
     const handleMdReject = async (reason: string) => {
         if (!selectedSwoForModal) return;
         try {
             await updateDoc(docRef("site_work_orders", selectedSwoForModal.id), {
-                closure_status: 'PM Review',
+                closure_status: 'CM Review',
                 md_reject_reason: reason,
             });
             if (user) {
@@ -826,8 +919,9 @@ export const SWOCloseWorkflow = () => {
         if (!selectedSwoToRequest) return;
         try {
             await updateDoc(docRef("site_work_orders", selectedSwoToRequest), {
-                closure_status: 'PM Review',
+                closure_status: 'CM Review',
                 pm_reject_reason: null,
+                cm_reject_reason: null,
                 cd_reject_reason: null,
                 md_reject_reason: null,
             });
@@ -847,8 +941,9 @@ export const SWOCloseWorkflow = () => {
         if (!rejectedSwoData) return;
         try {
             await updateDoc(docRef("site_work_orders", rejectedSwoData.id), {
-                closure_status: 'PM Review',
+                closure_status: 'CM Review',
                 pm_reject_reason: null,
+                cm_reject_reason: null,
                 cd_reject_reason: null,
                 md_reject_reason: null,
             });
@@ -894,7 +989,7 @@ export const SWOCloseWorkflow = () => {
     // Supervisor: cancel closure request
     const handleCancelRequest = async (swoId: string) => {
         try {
-            await updateDoc(docRef("site_work_orders", swoId), { closure_status: null });
+            await updateDoc(docRef("site_work_orders", swoId), { closure_status: null, cm_reject_reason: null, pm_reject_reason: null });
             showAlert('info', 'ยกเลิกแล้ว', 'ยกเลิกคำขอปิด SWO เรียบร้อยแล้ว');
         } catch (e) { console.error(e); }
     };
@@ -915,6 +1010,8 @@ export const SWOCloseWorkflow = () => {
             quality_score: swo.quality_score,
             on_time: swo.on_time,
             delay_reason: swo.delay_reason,
+            cm_closure_note: swo.cm_closure_note,
+            cm_reject_reason: swo.cm_reject_reason,
             cd_closure_note: swo.cd_closure_note,
             cd_reject_reason: swo.cd_reject_reason,
             md_reject_reason: swo.md_reject_reason,
@@ -923,9 +1020,10 @@ export const SWOCloseWorkflow = () => {
     };
 
     // SWOs Supervisor can request to close (Active, not already in closure flow)
-    const requestableSwos = swos.filter(s => !s.closure_status);
+    const requestableSwos = swos.filter(s => !s.closure_status && s.status === 'Accepted');
 
     const getStatusBadge = (status: string) => {
+        if (status === 'CM Review') return 'bg-green-100 text-green-700';
         if (status === 'PM Review') return 'bg-blue-100 text-blue-700';
         if (status === 'CD Review') return 'bg-indigo-100 text-indigo-700';
         if (status === 'MD Review') return 'bg-purple-100 text-purple-700';
@@ -972,8 +1070,8 @@ export const SWOCloseWorkflow = () => {
                         ) : swos.map(swo => {
                             const cs = swo.closure_status || 'Active';
                             const isClosed = cs === 'Closed SWO';
-                            const canCancel = user?.role === 'Supervisor' && cs === 'PM Review';
-                            const isRejectedBySupervisor = user?.role === 'Supervisor' && !cs && swo.pm_reject_reason;
+                            const canCancel = user?.role === 'Supervisor' && cs === 'CM Review';
+                            const isRejectedBySupervisor = user?.role === 'Supervisor' && !cs && (swo.pm_reject_reason || swo.cm_reject_reason);
                             
                             return (
                                 <tr
@@ -991,10 +1089,13 @@ export const SWOCloseWorkflow = () => {
                                         ) : (
                                             <>
                                                 <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusBadge(cs)}`}>{cs}</span>
-                                                {swo.cd_reject_reason && cs === 'PM Review' && (
+                                                {swo.cm_reject_reason && cs === 'CM Review' && (
+                                                    <span className="ml-2 text-xs text-red-600 font-medium">CM Rejected</span>
+                                                )}
+                                                {swo.cd_reject_reason && (cs === 'PM Review' || cs === 'CM Review') && (
                                                     <span className="ml-2 text-xs text-red-600 font-medium">CD Rejected</span>
                                                 )}
-                                                {swo.md_reject_reason && cs === 'PM Review' && (
+                                                {swo.md_reject_reason && (cs === 'PM Review' || cs === 'CM Review') && (
                                                     <span className="ml-2 text-xs text-red-600 font-medium">MD Rejected</span>
                                                 )}
                                             </>
@@ -1118,6 +1219,8 @@ export const SWOCloseWorkflow = () => {
                 isOpen={isDetailModalOpen}
                 onClose={() => setIsDetailModalOpen(false)}
                 swoData={selectedSwoForModal}
+                onCmAccept={handleCmAccept}
+                onCmReject={handleCmReject}
                 onPmAccept={handlePmAccept}
                 onPmReject={handlePmReject}
                 onCdAccept={handleCdAccept}

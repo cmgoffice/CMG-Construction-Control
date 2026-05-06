@@ -238,7 +238,9 @@ export default function SWOWorkflow() {
                         { label: '→', c: '' },
                         { label: 'Daily Reports', c: 'pending cm' },
                         { label: '→', c: '' },
-                        { label: 'Request Closure', c: 'pm review' },
+                        { label: 'Request Closure', c: 'pending cm' },
+                        { label: '→', c: '' },
+                        { label: 'CM→PM→CD→MD', c: 'pm review' },
                         { label: '→', c: '' },
                         { label: 'Closed SWO ✓', c: 'closed swo' },
                     ].map((item, i) =>
@@ -484,8 +486,8 @@ export default function SWOWorkflow() {
             <Section title="Phase 5 — SWO Closure (ปิดงาน)" icon={<Lock className="w-6 h-6" />} accent="purple">
                 <div className="space-y-5">
                     <div className="bg-white rounded-xl border border-purple-100 p-4 text-sm text-gray-600">
-                        <p><strong>ผู้เกี่ยวข้อง:</strong> <RoleBadge role="Supervisor" color="orange" /> <RoleBadge role="PM" color="blue" /> <RoleBadge role="CD" color="indigo" /> <RoleBadge role="MD" color="purple" /></p>
-                        <p className="mt-1">เมื่องานเสร็จ Supervisor ส่งคำขอปิด SWO ผ่านการอนุมัติ 3 ขั้น — PM → CD → MD</p>
+                        <p><strong>ผู้เกี่ยวข้อง:</strong> <RoleBadge role="Supervisor" color="orange" /> <RoleBadge role="CM" color="green" /> <RoleBadge role="PM" color="blue" /> <RoleBadge role="CD" color="indigo" /> <RoleBadge role="MD" color="purple" /></p>
+                        <p className="mt-1">เมื่องานเสร็จ Supervisor ส่งคำขอปิด SWO ผ่านการอนุมัติ 4 ขั้น — CM → PM → CD → MD</p>
                     </div>
 
                     {/* Closure Flow */}
@@ -497,46 +499,64 @@ export default function SWOWorkflow() {
                         </div>
                         <Arrow label="Request Closure" type="normal" />
 
-                        {/* PM Review */}
-                        <div className="bg-white rounded-xl border-2 border-blue-300 shadow-sm px-4 py-3 w-56 text-center">
-                            <StatusPill label="PM Review" color="pm review" />
-                            <div className="mt-2"><RoleBadge role="PM" color="blue" /></div>
+                        {/* CM Review */}
+                        <div className="bg-white rounded-xl border-2 border-green-300 shadow-sm px-4 py-3 w-56 text-center">
+                            <StatusPill label="CM Review" color="pending cm" />
+                            <div className="mt-2"><RoleBadge role="CM" color="green" /></div>
                             <ul className="text-xs text-gray-500 mt-1 text-left space-y-0.5">
-                                <li>• กรอก Closure Note</li>
-                                <li>• Quality Score</li>
-                                <li>• On Time / Delay</li>
+                                <li>• ตรวจสอบงานสังเขต</li>
+                                <li>• กรอก CM Closure Note</li>
                             </ul>
                         </div>
                         <div className="grid grid-cols-2 gap-8 my-2">
                             <div className="flex flex-col items-center gap-1">
                                 <Arrow label="Approve" type="approve" />
-                                <div className="bg-white rounded-xl border-2 border-indigo-300 shadow-sm px-4 py-3 w-52 text-center">
-                                    <StatusPill label="CD Review" color="cd review" />
-                                    <div className="mt-2"><RoleBadge role="CD" color="indigo" /></div>
-                                    <p className="text-xs text-gray-500 mt-1">ตรวจสอบ & อนุมัติ</p>
+                                {/* PM Review */}
+                                <div className="bg-white rounded-xl border-2 border-blue-300 shadow-sm px-4 py-3 w-52 text-center">
+                                    <StatusPill label="PM Review" color="pm review" />
+                                    <div className="mt-2"><RoleBadge role="PM" color="blue" /></div>
+                                    <ul className="text-xs text-gray-500 mt-1 text-left space-y-0.5">
+                                        <li>• Closure Note</li>
+                                        <li>• Quality Score</li>
+                                        <li>• On Time / Delay</li>
+                                    </ul>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4 mt-2">
                                     <div className="flex flex-col items-center gap-1">
                                         <Arrow label="Approve" type="approve" />
-                                        <div className="bg-white rounded-xl border-2 border-purple-300 shadow-sm px-4 py-3 w-44 text-center">
-                                            <StatusPill label="MD Review" color="md review" />
-                                            <div className="mt-2"><RoleBadge role="MD" color="purple" /></div>
-                                            <p className="text-xs text-gray-500 mt-1">Final Approval</p>
+                                        <div className="bg-white rounded-xl border-2 border-indigo-300 shadow-sm px-4 py-3 w-44 text-center">
+                                            <StatusPill label="CD Review" color="cd review" />
+                                            <div className="mt-2"><RoleBadge role="CD" color="indigo" /></div>
+                                            <p className="text-xs text-gray-500 mt-1">ตรวจสอบ & อนุมัติ</p>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-4 mt-2">
+                                        <div className="grid grid-cols-2 gap-3 mt-2">
                                             <div className="flex flex-col items-center gap-1">
                                                 <Arrow label="Approve" type="approve" />
-                                                <StatusPill label="Closed SWO ✓" color="closed swo" />
+                                                <div className="bg-white rounded-xl border-2 border-purple-300 shadow-sm px-3 py-2 w-36 text-center">
+                                                    <StatusPill label="MD Review" color="md review" />
+                                                    <div className="mt-1"><RoleBadge role="MD" color="purple" /></div>
+                                                    <p className="text-xs text-gray-500 mt-1">Final Approval</p>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <Arrow label="Approve" type="approve" />
+                                                        <StatusPill label="Closed ✓" color="closed swo" />
+                                                    </div>
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <Arrow label="Reject" type="reject" />
+                                                        <StatusPill label="→ CM" color="pending cm" />
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div className="flex flex-col items-center gap-1">
                                                 <Arrow label="Reject" type="reject" />
-                                                <StatusPill label="→ PM Review" color="pm review" />
+                                                <StatusPill label="→ CM Review" color="pending cm" />
                                             </div>
                                         </div>
                                     </div>
                                     <div className="flex flex-col items-center gap-1">
                                         <Arrow label="Reject" type="reject" />
-                                        <StatusPill label="→ PM Review" color="pm review" />
+                                        <StatusPill label="→ CM Review" color="pending cm" />
                                     </div>
                                 </div>
                             </div>
@@ -564,12 +584,21 @@ export default function SWOWorkflow() {
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 <tr className="hover:bg-gray-50">
+                                    <td className="px-4 py-3"><StatusPill label="CM Review" color="pending cm" /></td>
+                                    <td className="px-4 py-3"><RoleBadge role="CM" color="green" /></td>
+                                    <td className="px-4 py-3 text-gray-600">CM Closure Note, ตรวจสอบหน้างาน</td>
+                                    <td className="px-4 py-3">
+                                        <span className="text-green-600">Approve →</span> PM Review<br />
+                                        <span className="text-red-500">Reject →</span> คืน Supervisor
+                                    </td>
+                                </tr>
+                                <tr className="hover:bg-gray-50">
                                     <td className="px-4 py-3"><StatusPill label="PM Review" color="pm review" /></td>
                                     <td className="px-4 py-3"><RoleBadge role="PM" color="blue" /></td>
                                     <td className="px-4 py-3 text-gray-600">Closure Note, Quality Score, On-Time</td>
                                     <td className="px-4 py-3">
                                         <span className="text-green-600">Approve →</span> CD Review<br />
-                                        <span className="text-red-500">Reject →</span> คืน Supervisor
+                                        <span className="text-red-500">Reject →</span> CM Review
                                     </td>
                                 </tr>
                                 <tr className="hover:bg-gray-50">
@@ -578,7 +607,7 @@ export default function SWOWorkflow() {
                                     <td className="px-4 py-3 text-gray-600">CD Closure Note</td>
                                     <td className="px-4 py-3">
                                         <span className="text-green-600">Approve →</span> MD Review<br />
-                                        <span className="text-red-500">Reject →</span> PM Review
+                                        <span className="text-red-500">Reject →</span> CM Review
                                     </td>
                                 </tr>
                                 <tr className="hover:bg-gray-50">
@@ -587,7 +616,7 @@ export default function SWOWorkflow() {
                                     <td className="px-4 py-3 text-gray-600">Final verification</td>
                                     <td className="px-4 py-3">
                                         <span className="text-green-600">Approve →</span> <strong>Closed SWO ✓</strong><br />
-                                        <span className="text-red-500">Reject →</span> PM Review
+                                        <span className="text-red-500">Reject →</span> CM Review
                                     </td>
                                 </tr>
                                 <tr className="hover:bg-gray-50 bg-green-50">
@@ -610,7 +639,7 @@ export default function SWOWorkflow() {
                             'สร้าง / Assign SWO',
                             'อนุมัติ Daily Report (Final)',
                             'อนุมัติ Change Request',
-                            'Closure Review ขั้นแรก',
+                            'Closure Review ขั้นที่ 2 (ต่อจาก CM)',
                             'เห็นข้อมูลเฉพาะ Project ตนเอง',
                         ]} />
                     <RoleCard role="CM (Construction Manager)" color="green" icon={<HardHat className="w-4 h-4" />}
@@ -618,6 +647,8 @@ export default function SWOWorkflow() {
                             'สร้าง / Assign SWO',
                             'อนุมัติ Daily Report ขั้นแรก',
                             'ส่งต่อ Change Request ไปยัง PM',
+                            'Closure Review ขั้นแรก (CM Review)',
+                            'กรอก CM Closure Note & ส่งต่อ PM',
                         ]} />
                     <RoleCard role="Supervisor" color="orange" icon={<UserCheck className="w-4 h-4" />}
                         duties={[

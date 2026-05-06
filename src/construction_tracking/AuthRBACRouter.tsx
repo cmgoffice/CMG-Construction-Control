@@ -364,7 +364,7 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
           <div className={`w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center font-bold text-xl shadow-md border-b-2 border-blue-700 flex-shrink-0 mr-3 ${sidebarCollapsed ? 'md:mr-0' : 'md:mr-3'}`}>
             C
           </div>
-          <h1 className={`text-xl font-bold text-gray-900 tracking-tight whitespace-nowrap ${sidebarCollapsed ? 'md:hidden' : ''}`}>CMG Tracker</h1>
+          <h1 className={`text-xl font-bold text-gray-900 tracking-tight whitespace-nowrap ${sidebarCollapsed ? 'md:hidden' : ''}`}>CONSTRUCTION SWO</h1>
         </div>
 
         <nav className="flex-1 px-4 md:px-2 py-6 overflow-y-auto overflow-x-hidden w-full">

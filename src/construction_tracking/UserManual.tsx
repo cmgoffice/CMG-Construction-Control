@@ -403,7 +403,7 @@ const generateWordDocument = async () => {
                     new Paragraph({
                         children: [
                             new TextRun({
-                                text: "CMG TRACKER",
+                                text: "CONSTRUCTION SWO",
                                 size: 56,
                                 bold: true,
                                 color: "A23B72",
@@ -1084,7 +1084,7 @@ export const UserManualModal: React.FC<UserManualModalProps> = ({ isOpen, onClos
                             <BookOpen className="w-6 h-6 text-white" />
                         </div>
                         <div>
-                            <h2 className="text-lg font-bold text-white">คู่มือการใช้งาน CMG Tracker</h2>
+                            <h2 className="text-lg font-bold text-white">คู่มือการใช้งาน CONSTRUCTION SWO</h2>
                             <p className="text-blue-200 text-xs mt-0.5">User Manual — เลือก Role เพื่อดูขั้นตอน</p>
                         </div>
                     </div>

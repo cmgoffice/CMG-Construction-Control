@@ -82,7 +82,7 @@ export const AuthForm = () => {
                     <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl font-bold shadow-md">
                         C
                     </div>
-                    <h2 className="text-2xl font-bold text-gray-900">CMG Tracker</h2>
+                    <h2 className="text-2xl font-bold text-gray-900">CONSTRUCTION SWO</h2>
                     <p className="text-gray-500 mt-2">{isLogin ? 'Sign in to your account' : 'Create a new account'}</p>
                 </div>
 

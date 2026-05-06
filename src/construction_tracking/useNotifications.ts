@@ -183,6 +183,22 @@ export const useNotifications = (user: {
         }));
     }
 
+    // --- CM: SWOs waiting for closure review ---
+    if (role === 'CM') {
+        const closurePending = swos.filter(s =>
+            s.closure_status === 'CM Review' &&
+            swoInScope(s)
+        );
+        closurePending.forEach(s => items.push({
+            id: `closure-cm-${s.id}`,
+            label: `SWO ${s.swo_no || s.id}: ${s.work_name || ''} — รอ CM อนุมัติปิด SWO`,
+            path: '/closures',
+            type: 'closure_review',
+            step: 'รอ CM Review',
+            targetId: s.id
+        }));
+    }
+
     // --- PM: SWOs waiting for closure review ---
     if (role === 'PM') {
         const closurePending = swos.filter(s =>
