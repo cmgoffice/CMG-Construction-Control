@@ -48,6 +48,7 @@ export const DailyReportManager = () => {
     const [allTeamsList, setAllTeamsList] = useState<any[]>([]);
     const [projects, setProjects] = useState<any[]>([]);
     const [dailyReports, setDailyReports] = useState<any[]>([]);
+    const [users, setUsers] = useState<any[]>([]);
 
     React.useEffect(() => {
         const q1 = query(col("site_work_orders"));
@@ -68,7 +69,10 @@ export const DailyReportManager = () => {
         const q6 = query(col("daily_reports"));
         const unsub6 = onSnapshot(q6, (snapshot) => setDailyReports(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
 
-        return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); };
+        const q7 = query(col("users"));
+        const unsub7 = onSnapshot(q7, (snapshot) => setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+
+        return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); };
     }, []);
 
     // Auto-select SWO from notification navigation state
@@ -91,6 +95,7 @@ export const DailyReportManager = () => {
 
     // Date filter state (declared early because swoList computation depends on it)
     const [selectedDateFilter, setSelectedDateFilter] = useState<string>('');
+    const [swoStatusTab, setSwoStatusTab] = useState<'open' | 'closed'>('open');
     
     // Get unique dates from daily reports for the main date filter dropdown
     const availableDates = Array.from(new Set(dailyReports.map(r => r.date).filter(Boolean))).sort((a, b) => b.localeCompare(a)); // Sort dates descending (newest first)
@@ -99,7 +104,8 @@ export const DailyReportManager = () => {
     // When date filter is active, scope data to reports ON OR BEFORE that date
     const swoList = swos.map(swo => {
         const supData = supervisors.find(s => s.id === swo.supervisor_id);
-        const supervisorName = supData ? supData.name : 'Unknown';
+        const supUser = users.find(u => u.id === (swo.supervisor_uid || supData?.supervisor_uid));
+        const supervisorName = supData?.name || supUser ? `${supData?.name || `${supUser?.firstName || ''} ${supUser?.lastName || ''}`}`.trim() : (swo.supervisor_name || 'Unknown');
         const projectNo = getProjectNo(swo.project_id);
 
         // Get all daily reports for this SWO, scoped by date filter
@@ -149,7 +155,8 @@ export const DailyReportManager = () => {
             swo_no: swo.swo_no,
             scope: swo.work_name,
             c1_prog: c1Prog,
-            supervisor_name: supervisorName
+            supervisor_name: supervisorName,
+            supervisor_uid: swo.supervisor_uid || supData?.supervisor_uid || ''
         };
     });
 
@@ -158,7 +165,11 @@ export const DailyReportManager = () => {
         // Exclude SWOs with Draft status from the table
         if (swo.status === 'Draft') return false;
         if (user.role === 'Admin' || user.role === 'MD' || user.role === 'GM' || user.role === 'CD') return true;
-        if (user.role === 'Supervisor') return swo.supervisor_name === (user as any).name;
+        if (user.role === 'Supervisor') {
+            const byUid = !!(user as any)?.uid && swo.supervisor_uid === (user as any).uid;
+            const byName = swo.supervisor_name === (user as any).name;
+            return byUid || byName;
+        }
         return user.assigned_projects?.includes(swo.project_id_raw);
     });
 
@@ -179,6 +190,9 @@ export const DailyReportManager = () => {
                          !hasReports; // Include SWOs with no reports (Draft status)
         return matchProject && matchSupervisor && matchDate;
     });
+    const openSwoList = visibleSwoList.filter(swo => swo.closure_status !== 'Closed SWO');
+    const closedSwoList = visibleSwoList.filter(swo => swo.closure_status === 'Closed SWO');
+    const tabbedSwoList = swoStatusTab === 'closed' ? closedSwoList : openSwoList;
 
     const isReadOnly = user?.role !== 'Supervisor' && user?.role !== 'Admin';
 
@@ -258,11 +272,41 @@ export const DailyReportManager = () => {
 
     return (
         <div className="max-w-7xl mx-auto space-y-6">
+            <style>{`
+                @keyframes rejectedStrobe {
+                    0% { outline-color: rgba(239, 68, 68, 0.12); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.0), 0 0 0 0 rgba(239, 68, 68, 0.0); }
+                    50% { outline-color: rgba(239, 68, 68, 0.45); box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.22), 0 0 14px 3px rgba(248, 113, 113, 0.45); }
+                    100% { outline-color: rgba(239, 68, 68, 0.12); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.0), 0 0 0 0 rgba(239, 68, 68, 0.0); }
+                }
+                .rejected-strobe {
+                    outline: 1px solid transparent;
+                    outline-offset: -1px;
+                    animation: rejectedStrobe 1.1s steps(2, end) infinite;
+                }
+            `}</style>
             <AlertModal {...modalProps} />
             <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3 flex-wrap bg-white px-4 py-3 rounded-xl border border-gray-200 shadow-sm">
                 <div>
                     <h1 className="text-lg font-bold text-gray-900">Site Work Order list (SWO)</h1>
                     <p className="text-gray-500 text-xs mt-0.5">Select an SWO below to complete your Daily Progress Report.</p>
+                </div>
+                <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+                    <button
+                        type="button"
+                        onClick={() => setSwoStatusTab('open')}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${swoStatusTab === 'open' ? 'bg-white text-blue-700 shadow-sm border border-blue-100' : 'text-gray-600 hover:text-gray-800'}`}
+                    >
+                        SWO Active
+                        <span className="ml-1.5 text-[10px] text-gray-500">({openSwoList.length})</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setSwoStatusTab('closed')}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${swoStatusTab === 'closed' ? 'bg-white text-red-700 shadow-sm border border-red-100' : 'text-gray-600 hover:text-gray-800'}`}
+                    >
+                        SWO Status: Closed
+                        <span className="ml-1.5 text-[10px] text-gray-500">({closedSwoList.length})</span>
+                    </button>
                 </div>
 
                 {/* Filters */}
@@ -324,10 +368,10 @@ export const DailyReportManager = () => {
 
             {/* Group by project: one table per project; hide table if project has no items */}
             {(() => {
-                const byProject = visibleSwoList.reduce((acc, item) => {
+                const byProject = tabbedSwoList.reduce((acc, item) => {
                     const p = item.project_no || 'Unknown';
                     if (!acc[p]) acc[p] = []; acc[p].push(item); return acc;
-                }, {} as Record<string, typeof visibleSwoList>);
+                }, {} as Record<string, typeof tabbedSwoList>);
                 const projectOrder = Object.keys(byProject).sort();
                 if (projectOrder.length === 0) {
                     return (
@@ -341,15 +385,7 @@ export const DailyReportManager = () => {
                         {projectOrder.map(projectNo => {
                             const rows = byProject[projectNo];
                             if (!rows || rows.length === 0) return null;
-                            const sortedRows = rows
-                                .map((item, index) => ({ item, index }))
-                                .sort((a, b) => {
-                                    const aClosed = a.item.closure_status === 'Closed SWO';
-                                    const bClosed = b.item.closure_status === 'Closed SWO';
-                                    if (aClosed !== bClosed) return aClosed ? 1 : -1;
-                                    return a.index - b.index;
-                                })
-                                .map(({ item }) => item);
+                            const sortedRows = rows;
                             return (
                                 <div key={projectNo} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                                     <div className="px-3 py-1.5 bg-[#CCE5FF] border-b border-gray-200 font-semibold text-gray-800 text-[10px] md:text-xs">
@@ -362,7 +398,7 @@ export const DailyReportManager = () => {
                                             <div
                                                 key={item.id}
                                                 onClick={() => setSelectedSwo(swos.find(s => s.id === item.id))}
-                                                className="p-3 active:bg-gray-50 transition-colors cursor-pointer"
+                                                className={`p-3 active:bg-gray-50 transition-colors cursor-pointer ${swoStatusTab === 'open' && item.task_status === 'Rejected' ? 'rejected-strobe' : ''}`}
                                             >
                                                 <div className="flex items-start justify-between gap-2">
                                                     <div className="min-w-0 flex-1">
@@ -420,7 +456,7 @@ export const DailyReportManager = () => {
                                         </thead>
                                         <tbody className="divide-y divide-gray-200">
                                             {sortedRows.map(item => (
-                                                <tr key={item.id} onClick={() => setSelectedSwo(swos.find(s => s.id === item.id))} className="hover:bg-gray-100 transition-colors cursor-pointer group">
+                                                <tr key={item.id} onClick={() => setSelectedSwo(swos.find(s => s.id === item.id))} className={`hover:bg-gray-100 transition-colors cursor-pointer group ${swoStatusTab === 'open' && item.task_status === 'Rejected' ? 'rejected-strobe' : ''}`}>
                                                     <td className="px-3 py-1.5 border-r border-gray-200 bg-[#E6F2FF] group-hover:bg-[#cce6ff] text-xs font-medium truncate" title={item.project_no}>{item.project_no}</td>
                                                     <td className="px-2 py-1 border-r border-gray-200 bg-[#E6FFFF] group-hover:bg-[#ccffff] align-top min-w-0">
                                                         <span className={`inline-block font-medium text-[10px] leading-tight px-1.5 py-0.5 rounded ${item.closure_status
@@ -1136,6 +1172,7 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                 project_no: getProjectNo(swo.project_id),
                 supervisor: user?.name || swo.supervisor_id,
                 supervisor_name: user?.name || '',
+                supervisor_uid: user?.uid || swo.supervisor_uid || '',
                 work_name: swo.work_name || '',
                 status: 'Pending CM' as const,
                 cm_notes: '',
