@@ -341,6 +341,15 @@ export const DailyReportManager = () => {
                         {projectOrder.map(projectNo => {
                             const rows = byProject[projectNo];
                             if (!rows || rows.length === 0) return null;
+                            const sortedRows = rows
+                                .map((item, index) => ({ item, index }))
+                                .sort((a, b) => {
+                                    const aClosed = a.item.closure_status === 'Closed SWO';
+                                    const bClosed = b.item.closure_status === 'Closed SWO';
+                                    if (aClosed !== bClosed) return aClosed ? 1 : -1;
+                                    return a.index - b.index;
+                                })
+                                .map(({ item }) => item);
                             return (
                                 <div key={projectNo} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                                     <div className="px-3 py-1.5 bg-[#CCE5FF] border-b border-gray-200 font-semibold text-gray-800 text-[10px] md:text-xs">
@@ -349,7 +358,7 @@ export const DailyReportManager = () => {
 
                                     {/* Mobile: card list */}
                                     <div className="md:hidden divide-y divide-gray-100">
-                                        {rows.map(item => (
+                                        {sortedRows.map(item => (
                                             <div
                                                 key={item.id}
                                                 onClick={() => setSelectedSwo(swos.find(s => s.id === item.id))}
@@ -410,7 +419,7 @@ export const DailyReportManager = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-200">
-                                            {rows.map(item => (
+                                            {sortedRows.map(item => (
                                                 <tr key={item.id} onClick={() => setSelectedSwo(swos.find(s => s.id === item.id))} className="hover:bg-gray-100 transition-colors cursor-pointer group">
                                                     <td className="px-3 py-1.5 border-r border-gray-200 bg-[#E6F2FF] group-hover:bg-[#cce6ff] text-xs font-medium truncate" title={item.project_no}>{item.project_no}</td>
                                                     <td className="px-2 py-1 border-r border-gray-200 bg-[#E6FFFF] group-hover:bg-[#ccffff] align-top min-w-0">
@@ -1005,7 +1014,7 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                 });
             }
             setRequestChangeModalOpen(false);
-            showAlert('success', 'ส่งคำขอแก้ไขแล้ว', 'คำขอแก้ไขถูกส่งไปยัง CM และ PM แล้ว');
+            showAlert('success', 'ส่งคำขอแก้ไขแล้ว', 'คำขอแก้ไขถูกส่งไปยัง CM แล้ว');
         } catch (e: any) {
             showAlert('error', 'เกิดข้อผิดพลาด', e.message);
         }
@@ -1064,13 +1073,27 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                     : false;
     const isReadOnly = !isEditable;
 
+    const clampTodayProgress = (todayValue: number, activity: any) => {
+        const total = Number(activity.total) || 0;
+        const prevTotal = Number(activity.prev_total) || 0;
+        const remaining = Math.max(0, total - prevTotal);
+        return Math.max(0, Math.min(todayValue, remaining));
+    };
+
     // --- Handlers ---
     // Keep today as string while typing so "0.0", "0.03" don't disappear (parseFloat("0.") => 0 would clear the input)
     const handleActivityChange = (id: string, val: string) => {
         let sanitized = val.replace(/[^\d.]/g, '');
         const firstDot = sanitized.indexOf('.');
         if (firstDot >= 0) sanitized = sanitized.slice(0, firstDot + 1) + sanitized.slice(firstDot + 1).replace(/\./g, '');
-        setActivities(activities.map((a: any) => a.id === id ? { ...a, today: sanitized } : a));
+        setActivities(activities.map((a: any) => {
+            if (a.id !== id) return a;
+            if (sanitized === '' || sanitized === '.') return { ...a, today: '' };
+            const parsed = parseFloat(sanitized);
+            if (Number.isNaN(parsed)) return { ...a, today: '' };
+            const clamped = clampTodayProgress(parsed, a);
+            return { ...a, today: String(clamped) };
+        }));
     };
 
     const handleSubmit = async () => {
@@ -1117,7 +1140,11 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                 status: 'Pending CM' as const,
                 cm_notes: '',
                 created_at: new Date().toISOString(),
-                activities: activities.map((a: any) => ({ ...a, today: parseFloat(String(a.today)) || 0 })),
+                activities: activities.map((a: any) => {
+                    const parsedToday = parseFloat(String(a.today)) || 0;
+                    const clampedToday = clampTodayProgress(parsedToday, a);
+                    return { ...a, today: clampedToday };
+                }),
                 equipments,
                 workers,
                 notes,
@@ -1265,11 +1292,11 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                 <div className="bg-amber-50/90 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                         <Edit3 className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span className="text-amber-800 text-sm font-medium truncate">ขอแก้ไขปริมาณงาน (C1/C2/C3) คำขอจะส่งไปยัง CM – PM</span>
+                        <span className="text-amber-800 text-sm font-medium truncate">ขอแก้ไขปริมาณงาน (C1/C2/C3) คำขอจะส่งไปยัง CM</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                         {pendingChangeRequest ? (
-                            <span className="text-xs font-medium text-amber-700 bg-amber-100 border border-amber-200 px-2 py-1 rounded">รอ CM/PM ({pendingChangeRequest.status})</span>
+                            <span className="text-xs font-medium text-amber-700 bg-amber-100 border border-amber-200 px-2 py-1 rounded">รอ CM ({pendingChangeRequest.status})</span>
                         ) : (
                             <>
                                 <button type="button" onClick={openRequestChangeModal} disabled={requestingChange} className="px-3 py-1.5 text-amber-700 border border-amber-300 rounded-lg text-sm font-medium bg-white hover:bg-amber-100 cursor-pointer disabled:opacity-50">ขอแก้ไขอีกครั้ง</button>
@@ -1286,10 +1313,10 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                     <div className="flex items-center gap-2 min-w-0">
                         <Edit3 className="w-4 h-4 text-amber-600 shrink-0" />
                         <span className="text-amber-800 text-sm font-medium truncate">ขอแก้ไขปริมาณงาน (C1/C2/C3)</span>
-                        <span className="text-amber-600 text-xs hidden sm:inline">คำขอจะส่งไปยัง CM → PM</span>
+                        <span className="text-amber-600 text-xs hidden sm:inline">คำขอจะส่งไปยัง CM</span>
                     </div>
                     {pendingChangeRequest ? (
-                        <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-1 rounded shrink-0">รอ CM/PM ({pendingChangeRequest.status})</span>
+                        <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-1 rounded shrink-0">รอ CM ({pendingChangeRequest.status})</span>
                     ) : (
                         <button type="button" onClick={openRequestChangeModal} disabled={requestingChange} className="shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg flex items-center gap-1">
                             <Edit3 className="w-3.5 h-3.5" /> ขอแก้ไข
@@ -1455,8 +1482,10 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                     <tbody className="divide-y divide-gray-100">
                         {activities.map((a: any) => {
                             const todayNum = parseFloat(String(a.today)) || 0;
-                            const upToDate = a.prev_total + todayNum;
-                            const percent = ((upToDate / a.total) * 100).toFixed(1);
+                            const clampedTodayNum = clampTodayProgress(todayNum, a);
+                            const upToDate = Math.min((Number(a.total) || 0), (Number(a.prev_total) || 0) + clampedTodayNum);
+                            const percentNum = (Number(a.total) || 0) > 0 ? Math.min(100, (upToDate / Number(a.total)) * 100) : 0;
+                            const percent = percentNum.toFixed(1);
 
                             return (
                                 <tr key={a.id} className="hover:bg-gray-50">
@@ -1479,9 +1508,9 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                                     </td>
                                     <td className="px-6 py-4 text-right font-semibold text-gray-800">{upToDate} {a.unit}</td>
                                     <td className="px-6 py-4 text-right">
-                                        <span className={`px-2 py-1 rounded text-xs font-bold ${percent === 'Infinity' ? 'bg-yellow-100 text-yellow-700' : parseFloat(percent) >= 100 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                                        <span className={`px-2 py-1 rounded text-xs font-bold ${parseFloat(percent) >= 100 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                                             }`}>
-                                            {percent === 'NaN' || percent === 'Infinity' ? '0.0' : percent}%
+                                            {percent}%
                                         </span>
                                     </td>
                                 </tr>
@@ -1871,18 +1900,7 @@ export const ApprovalDashboard = () => {
 
     const canDelete = user?.role === 'Admin';
 
-    // --- Change Request: CM Forward to PM ---
-    const handleChangeRequestForward = async (req: any) => {
-        try {
-            await updateDoc(docRef("swo_change_requests", req.id), { status: 'Pending PM' });
-            if (user) {
-                await logActivity({ uid: user.uid, name: user.name, role: user.role, action: 'Forward', menu: 'Change Request', detail: `Forward change request SWO ${req.swo_no} to PM` });
-            }
-            showAlert('success', 'ส่งต่อ PM แล้ว', 'คำขอแก้ไขถูกส่งไปยัง PM แล้ว');
-        } catch (e: any) { showAlert('error', 'เกิดข้อผิดพลาด', e.message); }
-    };
-
-    // --- Change Request: PM Open Edit Modal ---
+    // --- Change Request: Open Edit Modal ---
     const openChangeEditModal = (req: any) => {
         setChangeEditModal({ open: true, req });
         setChangeEditDraft({
@@ -1892,7 +1910,7 @@ export const ApprovalDashboard = () => {
         });
     };
 
-    // --- Change Request: PM Submit (apply draft to SWO, set Assigned + pending_change_acceptance) ---
+    // --- Change Request: CM/PM Submit (apply draft to SWO, set Assigned + pending_change_acceptance) ---
     const handleChangeRequestApply = async () => {
         const req = changeEditModal.req;
         if (!req || !changeEditDraft) return;
@@ -1931,8 +1949,11 @@ export const ApprovalDashboard = () => {
         } catch (e: any) { showAlert('error', 'เกิดข้อผิดพลาด', e.message); }
     };
 
-    const canForwardChangeRequest = (req: any) => (user?.role === 'CM' || user?.role === 'Admin') && req?.status === 'Pending CM';
-    const canApproveChangeRequest = (req: any) => (user?.role === 'PM' || user?.role === 'Admin') && req?.status === 'Pending PM';
+    const canApproveChangeRequest = (req: any) =>
+        (
+            ((user?.role === 'CM' || user?.role === 'Admin') && req?.status === 'Pending CM') ||
+            ((user?.role === 'PM' || user?.role === 'Admin') && req?.status === 'Pending PM')
+        );
 
     return (
         <div className="flex flex-col lg:flex-row min-h-[calc(100vh-8rem)] lg:h-[calc(100vh-8rem)] gap-4 lg:gap-6 pb-6 lg:pb-12">
@@ -2223,9 +2244,6 @@ export const ApprovalDashboard = () => {
                                     </div>
                                 </div>
                                 <div className="flex flex-wrap gap-3 pt-4 border-t">
-                                    {canForwardChangeRequest(selectedChangeRequest) && (
-                                        <button onClick={() => handleChangeRequestForward(selectedChangeRequest)} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl">ส่งต่อ PM</button>
-                                    )}
                                     {canApproveChangeRequest(selectedChangeRequest) && (
                                         <button onClick={() => openChangeEditModal(selectedChangeRequest)} className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl">อนุมัติและแก้ไขปริมาณ/ราคา</button>
                                     )}
@@ -2269,8 +2287,10 @@ export const ApprovalDashboard = () => {
                                             </thead>
                                             <tbody className="divide-y divide-gray-100">
                                                 {(report.activities || []).map((a: any, i: number) => {
-                                                    const upToDate = (a.prev_total || 0) + (a.today || 0);
-                                                    const percent = a.total > 0 ? ((upToDate / a.total) * 100).toFixed(1) : '0.0';
+                                                    const total = Number(a.total) || 0;
+                                                    const rawUpToDate = (Number(a.prev_total) || 0) + (Number(a.today) || 0);
+                                                    const upToDate = Math.min(total, rawUpToDate);
+                                                    const percent = total > 0 ? Math.min(100, (upToDate / total) * 100).toFixed(1) : '0.0';
                                                     return (
                                                         <tr key={i} className="hover:bg-gray-50">
                                                             <td className="px-4 py-3 font-medium text-gray-800">{a.desc || a.description || '-'}</td>
