@@ -71,10 +71,9 @@ export const useNotifications = (user: {
     const reportInScope = (r: any) =>
         isAdminOrMD || assignedProjects.includes(r.project_id);
 
-    // Match SWO assigned to this supervisor:
-    // - by supervisor_name (stored since latest fix) OR
-    // - by supervisor_id === uid (legacy ClosureWorkflows pattern)
+    // Match SWO assigned to this supervisor by auth UID, with legacy fallbacks.
     const swoIsMineSupervisor = (swo: any) =>
+        (uid && swo.supervisor_uid === uid) ||
         (userName && swo.supervisor_name === userName) ||
         (uid && swo.supervisor_id === uid);
 

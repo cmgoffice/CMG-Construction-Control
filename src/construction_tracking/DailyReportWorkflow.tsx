@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle, XCircle, Clock, Save, Send, AlertTriangle, MessageSquare, FileText, Edit3 } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Save, Send, AlertTriangle, MessageSquare, FileText, Edit3, Trash2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthRBACRouter';
 import { col, docRef, storage, logActivity } from './firebase';
@@ -38,6 +38,10 @@ const StatusBadge = ({ status, compact }: { status: ReportStatus; compact?: bool
     );
 };
 
+const formatProgressValue = (value: number | string | null | undefined) => {
+    return (Number(value) || 0).toFixed(2);
+};
+
 export const DailyReportManager = () => {
     const { user } = useAuth();
     const { showAlert, showDelete, modalProps } = useAlert();
@@ -47,6 +51,7 @@ export const DailyReportManager = () => {
     const isSupervisorLike = user?.role === 'Supervisor' || hasUniversalAccess;
     const canEditChangeRequestSwo = isAdminLike || user?.role === 'PM';
     const [selectedSwo, setSelectedSwo] = useState<any | null>(null);
+    const [editingSwo, setEditingSwo] = useState<any | null>(null);
     const [swos, setSwos] = useState<any[]>([]);
     const [supervisors, setSupervisors] = useState<any[]>([]);
     const [equipmentsList, setEquipmentsList] = useState<any[]>([]);
@@ -200,6 +205,18 @@ export const DailyReportManager = () => {
     const tabbedSwoList = swoStatusTab === 'closed' ? closedSwoList : openSwoList;
 
     const isReadOnly = !isSupervisorLike && !isAdminLike;
+    const canManageActiveSwo = isAdminLike || user?.role === 'PM';
+    const canEditActiveSwo = (item: any) => {
+        const progress = parseFloat(item?.c1_prog || '0') || 0;
+        if (!canManageActiveSwo || item?.closure_status || item?.status === 'Draft') return false;
+        return progress < 100;
+    };
+
+    const openEditSwo = (swoId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        const found = swos.find(s => s.id === swoId);
+        if (found) setEditingSwo(found);
+    };
 
     const handleDeleteSwo = (swoId: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -224,6 +241,10 @@ export const DailyReportManager = () => {
         };
         return styles[status] || 'bg-gray-100 text-gray-600';
     };
+
+    if (editingSwo) {
+        return <SWOCreationForm editSwo={editingSwo} onCancelEdit={() => setEditingSwo(null)} />;
+    }
 
     if (selectedSwo) {
         if (selectedSwo.status === 'Assigned' && isSupervisorLike && !selectedSwo.pending_change_acceptance) {
@@ -412,9 +433,35 @@ export const DailyReportManager = () => {
                                                         <p className="text-[10px] text-gray-500 mt-1">Work Name/Scope</p>
                                                         <p className="text-xs text-gray-800 truncate">{item.scope}</p>
                                                     </div>
-                                                    <span className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-bold ${parseFloat(item.c1_prog) >= 100 ? 'bg-green-100 text-green-700' : parseFloat(item.c1_prog) > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                                                        {item.c1_prog}
-                                                    </span>
+                                                    <div className="shrink-0 flex items-center gap-1">
+                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${parseFloat(item.c1_prog) >= 100 ? 'bg-green-100 text-green-700' : parseFloat(item.c1_prog) > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                            {item.c1_prog}
+                                                        </span>
+                                                        {canManageActiveSwo && (
+                                                            <span className="inline-flex items-center gap-0.5">
+                                                                {canEditActiveSwo(item) && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => openEditSwo(item.id, e)}
+                                                                        title="Edit / Reassign"
+                                                                        aria-label="Edit / Reassign SWO"
+                                                                        className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 hover:text-blue-800"
+                                                                    >
+                                                                        <Edit3 className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); handleDeleteSwo(item.id, e); }}
+                                                                    title="Delete SWO"
+                                                                    aria-label="Delete SWO"
+                                                                    className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-red-200 bg-white text-red-500 hover:bg-red-50 hover:text-red-700"
+                                                                >
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <div className="flex flex-wrap gap-1.5 mt-2">
                                                     <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${item.closure_status ? 'text-red-700 bg-red-50' : item.status === 'Accepted' ? 'text-green-600 bg-green-50' : item.status === 'Assigned' ? 'text-blue-600 bg-blue-50' : item.status === 'Request Change' ? 'text-orange-600 bg-orange-50' : item.status === 'Draft' ? 'text-purple-600 bg-purple-50' : 'text-gray-600 bg-gray-100'}`}>
@@ -426,17 +473,6 @@ export const DailyReportManager = () => {
                                                     <span>รายงานล่าสุด: {item.prev_date}</span>
                                                     <span className="truncate max-w-[45%]" title={item.supervisor}>{item.supervisor}</span>
                                                 </div>
-                                                {(isAdminLike || user?.role === 'PM') && (
-                                                    <div className="mt-2 pt-2 border-t border-gray-100">
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => { e.stopPropagation(); handleDeleteSwo(item.id, e); }}
-                                                            className="text-red-500 hover:text-red-700 text-[10px] font-semibold"
-                                                        >
-                                                            ลบ SWO
-                                                        </button>
-                                                    </div>
-                                                )}
                                             </div>
                                         ))}
                                     </div>
@@ -454,8 +490,8 @@ export const DailyReportManager = () => {
                                                 <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[10%]">SWO no.</th>
                                                 <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[22%]">Work Name/Scope</th>
                                                 <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[9%]">C1 Progress %</th>
-                                                {(isAdminLike || user?.role === 'PM') && (
-                                                    <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] w-[8%]">Actions</th>
+                                                {canManageActiveSwo && (
+                                                    <th className="px-2 py-1.5 text-xs font-semibold bg-[#FFE6CC] w-[7%]">Actions</th>
                                                 )}
                                             </tr>
                                         </thead>
@@ -493,14 +529,30 @@ export const DailyReportManager = () => {
                                                             {item.c1_prog}
                                                         </span>
                                                     </td>
-                                                    {(isAdminLike || user?.role === 'PM') && (
-                                                        <td className="px-3 py-1.5 bg-[#FFF5EE] group-hover:bg-[#ffe8d6]">
+                                                    {canManageActiveSwo && (
+                                                        <td className="px-2 py-1 bg-[#FFF5EE] group-hover:bg-[#ffe8d6]">
+                                                            <div className="flex items-center justify-center gap-1">
+                                                                {canEditActiveSwo(item) && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => openEditSwo(item.id, e)}
+                                                                        title="Edit / Reassign"
+                                                                        aria-label="Edit / Reassign SWO"
+                                                                        className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 hover:text-blue-800 transition-colors"
+                                                                    >
+                                                                        <Edit3 className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                )}
                                                             <button
+                                                                type="button"
                                                                 onClick={(e) => handleDeleteSwo(item.id, e)}
-                                                                className="text-red-500 hover:text-red-700 bg-white border border-red-200 hover:bg-red-50 px-2 py-0.5 rounded-md transition-colors text-xs font-semibold"
+                                                                title="Delete SWO"
+                                                                aria-label="Delete SWO"
+                                                                className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-red-200 bg-white text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
                                                             >
-                                                                Delete
+                                                                <Trash2 className="w-3.5 h-3.5" />
                                                             </button>
+                                                            </div>
                                                         </td>
                                                     )}
                                                 </tr>
@@ -1099,6 +1151,14 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
     // --- Role + Status based read-only logic ---
     const reportStatus: string = existingReport?.status || 'none';
     const isLockedByStatus = reportStatus === 'Approved' || reportStatus === 'Pending CM' || reportStatus === 'Pending PM';
+    const reportSupervisorName = existingReport?.supervisor_name || existingReport?.supervisor || '';
+    const reportSupervisorUid = existingReport?.supervisor_uid || '';
+    const currentUserOwnsExistingReport =
+        !existingReport ||
+        (!!user?.uid && reportSupervisorUid === user.uid) ||
+        (!!user?.name && reportSupervisorName === user.name);
+    const existingReportBelongsToAnotherSupervisor =
+        !!existingReport && isSupervisorLike && !isAdminLike && !currentUserOwnsExistingReport;
 
     // Admin: locked only when already Approved (cannot re-edit approved)
     // Supervisor: (1) Closed SWO → cannot edit; (2) Pending change acceptance → cannot submit until accept; (3) Rejected → within 2 days; (4) else → today/yesterday
@@ -1107,9 +1167,11 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
             ? false
             : (swo?.pending_change_acceptance)
                 ? false
-                : reportStatus === 'Rejected'
-                    ? isRejectedWithinTwoDays(existingReport)
-                    : (selectedDate === todayStr || selectedDate === yesterdayStr) && !isLockedByStatus;
+                : existingReportBelongsToAnotherSupervisor
+                    ? false
+                    : reportStatus === 'Rejected'
+                        ? isRejectedWithinTwoDays(existingReport)
+                        : (selectedDate === todayStr || selectedDate === yesterdayStr) && !isLockedByStatus;
     const isEditable =
         (swo?.closure_status) ? false
             : isAdminLike ? !isLockedByStatus
@@ -1127,7 +1189,7 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
     // --- Handlers ---
     // Keep today as string while typing so "0.0", "0.03" don't disappear (parseFloat("0.") => 0 would clear the input)
     const handleActivityChange = (id: string, val: string) => {
-        let sanitized = val.replace(/[^\d.]/g, '');
+        let sanitized = val.replace(/,/g, '.').replace(/[^\d.]/g, '');
         const firstDot = sanitized.indexOf('.');
         if (firstDot >= 0) sanitized = sanitized.slice(0, firstDot + 1) + sanitized.slice(firstDot + 1).replace(/\./g, '');
         setActivities(activities.map((a: any) => {
@@ -1135,6 +1197,10 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
             if (sanitized === '' || sanitized === '.') return { ...a, today: '' };
             const parsed = parseFloat(sanitized);
             if (Number.isNaN(parsed)) return { ...a, today: '' };
+            if (sanitized.endsWith('.')) {
+                const clamped = clampTodayProgress(parsed, a);
+                return { ...a, today: clamped < parsed ? String(clamped) : sanitized };
+            }
             const clamped = clampTodayProgress(parsed, a);
             return { ...a, today: String(clamped) };
         }));
@@ -1264,6 +1330,11 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                         <p className={`mt-2 text-lg font-bold ${swo?.closure_status ? 'text-red-700 bg-red-50 px-3 py-1.5 rounded-lg inline-block' : 'text-gray-700'}`}>
                             SWO Status: {swo?.closure_status ? `Closed - ${swo.closure_status}` : (swo?.status || 'Active')}
                         </p>
+                        {existingReport && reportSupervisorName && (
+                            <p className="mt-2 text-sm font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-lg inline-block">
+                                Report Owner: Supervisor {reportSupervisorName}
+                            </p>
+                        )}
                         <div className="flex flex-col sm:flex-row gap-4 mt-2">
                             <div className="flex items-center gap-2 text-gray-600">
                                 <span className="font-medium">Start Date:</span>
@@ -1322,6 +1393,9 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                     )}
                     {isSupervisorLike && reportStatus === 'none' && selectedDate < yesterdayStr && (
                         <p className="text-xs text-gray-500 mt-1 font-medium">📅 ดูข้อมูลย้อนหลัง (ส่งรายงานได้เฉพาะวันนี้และเมื่อวาน)</p>
+                    )}
+                    {existingReportBelongsToAnotherSupervisor && (
+                        <p className="text-xs text-indigo-600 mt-1 font-medium">รายงานนี้เป็นของ Supervisor {reportSupervisorName} - ดูได้อย่างเดียว</p>
                     )}
                     {swo?.closure_status && (
                         <p className="text-xs text-red-600 mt-1 font-medium">🔒 SWO ปิดแล้ว – ดูได้อย่างเดียว (กรอกข้อมูลไม่ได้)</p>
@@ -1536,7 +1610,7 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                                 <tr key={a.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4 font-medium text-gray-800">{a.desc}</td>
                                     <td className="px-6 py-4">{a.total} {a.unit}</td>
-                                    <td className="px-6 py-4 text-gray-500">{a.prev_total} {a.unit}</td>
+                                    <td className="px-6 py-4 text-gray-500">{formatProgressValue(a.prev_total)} {a.unit}</td>
                                     <td className="px-6 py-4 bg-blue-50/10">
                                         <div className="flex items-center gap-2">
                                             <input
@@ -1551,7 +1625,7 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                                             <span className="text-xs text-gray-500">{a.unit}</span>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-right font-semibold text-gray-800">{upToDate} {a.unit}</td>
+                                    <td className="px-6 py-4 text-right font-semibold text-gray-800">{formatProgressValue(upToDate)} {a.unit}</td>
                                     <td className="px-6 py-4 text-right">
                                         <span className={`px-2 py-1 rounded text-xs font-bold ${parseFloat(percent) >= 100 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                                             }`}>
@@ -2341,12 +2415,12 @@ export const ApprovalDashboard = () => {
                                                         <tr key={i} className="hover:bg-gray-50">
                                                             <td className="px-4 py-3 font-medium text-gray-800">{a.desc || a.description || '-'}</td>
                                                             <td className="px-4 py-3">{a.total} {a.unit}</td>
-                                                            <td className="px-4 py-3 text-gray-500">{a.prev_total || 0} {a.unit}</td>
+                                                            <td className="px-4 py-3 text-gray-500">{formatProgressValue(a.prev_total)} {a.unit}</td>
                                                             <td className="px-4 py-3 bg-blue-50/10">
                                                                 <span className="w-24 inline-block text-right font-bold text-blue-700">{a.today || 0}</span>
                                                                 <span className="text-xs text-gray-500 ml-1">{a.unit}</span>
                                                             </td>
-                                                            <td className="px-4 py-3 text-right font-semibold text-gray-800">{upToDate} {a.unit}</td>
+                                                            <td className="px-4 py-3 text-right font-semibold text-gray-800">{formatProgressValue(upToDate)} {a.unit}</td>
                                                             <td className="px-4 py-3 text-right">
                                                                 <span className={`px-2 py-1 rounded text-xs font-bold ${parseFloat(percent) >= 100 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
                                                                     {percent}%

@@ -732,7 +732,7 @@ export const AuthRBACRouter = () => {
           } />
 
           <Route path="/analytics" element={
-            <ProtectedRoute allowedRoles={['Admin', 'MD', 'GM', 'CD', 'PM']}>
+            <ProtectedRoute allowedRoles={['Admin', 'MD', 'GM', 'CD', 'PM', 'CM']}>
               <Layout>
                 <ExecutiveDashboards />
               </Layout>

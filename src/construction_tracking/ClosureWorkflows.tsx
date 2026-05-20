@@ -720,7 +720,10 @@ export const SWOCloseWorkflow = () => {
                 }
                 if (isSupervisorLike) {
                     // Include SWOs assigned to this supervisor: in closure flow, rejected, or active/cancelled (can request closure)
-                    const isAssigned = supervisorDocId ? swo.supervisor_id === supervisorDocId : swo.supervisor_name === user.name;
+                    const isAssigned =
+                        (!!user.uid && swo.supervisor_uid === user.uid) ||
+                        (!!supervisorDocId && swo.supervisor_id === supervisorDocId) ||
+                        swo.supervisor_name === user.name;
                     if (!isAssigned) return false;
                     
                     const cs = swo.closure_status;
