@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { onSnapshot, query } from 'firebase/firestore';
 import { col } from './firebase';
+import { hasUniversalRoleAccess, isSystemAdmin } from './roleUtils';
 
 export type NotificationType = 'assigned' | 'rejected' | 'pending_cm' | 'pending_pm' | 'change_request' | 'swo_change_request' | 'closure_review' | 'closure_rejected';
 
@@ -61,7 +62,7 @@ export const useNotifications = (user: {
     const uid = user.uid || '';
     const userName = user.name || '';
     const assignedProjects = user.assigned_projects || [];
-    const isAdminOrMD = role === 'Admin' || role === 'MD';
+    const isAdminOrMD = hasUniversalRoleAccess(role) || role === 'MD';
 
     // Filter helpers
     const swoInScope = (swo: any) =>
@@ -311,7 +312,7 @@ export const useNotifications = (user: {
     }
 
     // --- Admin: all pending approvals + change requests + closure reviews ---
-    if (role === 'Admin') {
+    if (isSystemAdmin(role)) {
         const pendingCM = reports.filter(r => r.status === 'Pending CM');
         pendingCM.forEach(r => items.push({
             id: `report-admin-cm-${r.id}`,
@@ -355,6 +356,7 @@ export const useNotifications = (user: {
 
         // Admin can see all closure reviews
         const closurePending = swos.filter(s => 
+            s.closure_status === 'CM Review' || 
             s.closure_status === 'PM Review' || 
             s.closure_status === 'CD Review' || 
             s.closure_status === 'MD Review'

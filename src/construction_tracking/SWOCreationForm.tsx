@@ -4,6 +4,7 @@ import { col, docRef, logActivity } from './firebase';
 import { onSnapshot, query, addDoc, updateDoc, getDocs, where, deleteDoc } from 'firebase/firestore';
 import { useAuth } from './AuthRBACRouter';
 import { AlertModal, useAlert } from './AlertModal';
+import { canAccessAllProjects } from './roleUtils';
 
 export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: any, onCancelEdit?: () => void }) {
     const { user } = useAuth();
@@ -57,7 +58,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
 
     const activeProjects = realProjects.filter(p => {
         if (!user) return false;
-        if (user.role === 'Admin' || user.role === 'MD' || user.role === 'GM' || user.role === 'CD') return true;
+        if (canAccessAllProjects(user.role)) return true;
         return user.assigned_projects?.includes(p.id);
     });
 
@@ -151,7 +152,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
     // Filter drafts by user's accessible projects
     const visibleDrafts = drafts.filter(d => {
         if (!user) return false;
-        if (user.role === 'Admin' || user.role === 'MD' || user.role === 'GM' || user.role === 'CD') return true;
+        if (canAccessAllProjects(user.role)) return true;
         return user.assigned_projects?.includes(d.project_id);
     });
 

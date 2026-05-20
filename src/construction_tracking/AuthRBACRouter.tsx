@@ -19,6 +19,7 @@ import ExecutiveDashboards from './ExecutiveDashboards';
 import SWOWorkflow from './SWOWorkflow';
 import { onSnapshot, query, updateDoc } from 'firebase/firestore';
 import { col, docRef, logActivity } from './firebase';
+import { canAccessAllProjects, canAccessAnalytics, canSeeApprovals, canUseSwoCreation, hasUniversalRoleAccess, isSystemAdmin } from './roleUtils';
 
 // Wrapper: reads location.state to auto-edit a specific SWO
 const SWOCreationWrapper: React.FC = () => {
@@ -66,7 +67,7 @@ export const AuthProvider = RealAuthProvider;
 
 // --- Default path per role (redirect here when no permission, so no Access Denied page) ---
 const getDefaultPathForRole = (role: string): string => {
-  if (role === 'Admin' || role === 'Administrator') return '/admin';
+  if (isSystemAdmin(role)) return '/admin';
   if (role === 'Supervisor') return '/daily-report';
   return '/dashboard';
 };
@@ -85,7 +86,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  if (allowedRoles && !hasUniversalRoleAccess(user.role) && !allowedRoles.includes(user.role)) {
     return <Navigate to={getDefaultPathForRole(user.role)} replace />;
   }
 
@@ -187,7 +188,7 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Menu navigation logging removed as per requirement
 
   useEffect(() => {
-    const isAdminRole = user?.role === 'Admin' || (user?.role as string) === 'Administrator';
+    const isAdminRole = isSystemAdmin(user?.role);
     if (!isAdminRole) return;
     const q = query(col('users'));
     const unsub = onSnapshot(q, (snapshot) => {
@@ -202,13 +203,12 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
 
   // Fetch pending reports count for sidebar notification
   useEffect(() => {
-    const canSeeApprovals = ['Admin', 'MD', 'PM', 'CM'].includes(user?.role || '');
-    if (!canSeeApprovals) return;
+    if (!canSeeApprovals(user?.role)) return;
     
     const q = query(col('daily_reports'));
     const unsub = onSnapshot(q, (snapshot) => {
       const reports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-      const filtered = (user?.role === 'Admin' || user?.role === 'MD')
+      const filtered = (hasUniversalRoleAccess(user?.role) || user?.role === 'MD')
         ? reports
         : reports.filter((r: any) => (user as any)?.assigned_projects?.includes(r.project_id));
       
@@ -220,13 +220,12 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
 
   // Fetch pending change requests count for sidebar notification
   useEffect(() => {
-    const canSeeApprovals = ['Admin', 'MD', 'PM', 'CM'].includes(user?.role || '');
-    if (!canSeeApprovals) return;
+    if (!canSeeApprovals(user?.role)) return;
     
     const q = query(col('swo_change_requests'));
     const unsub = onSnapshot(q, (snapshot) => {
       const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-      const filtered = (user?.role === 'Admin' || user?.role === 'MD')
+      const filtered = (hasUniversalRoleAccess(user?.role) || user?.role === 'MD')
         ? requests
         : requests.filter((r: any) => (user as any)?.assigned_projects?.includes(r.project_id));
       
@@ -269,8 +268,8 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
           }
         }
         // Admin sees all pending closure tasks
-        else if (user.role === 'Admin') {
-          if (cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review') {
+        else if (hasUniversalRoleAccess(user.role)) {
+          if (cs === 'CM Review' || cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review') {
             pendingCount++;
           }
         }
@@ -377,7 +376,7 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
             </Link>
           )}
 
-          {(user?.role === 'Admin' || user?.role === 'MD' || user?.role === 'PM' || user?.role === 'CM') && (
+          {canUseSwoCreation(user?.role) && (
             <Link to="/swo-creation" className={navLinkClass('/swo-creation')} title="Create SWO">
               <FileText className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
               <span className={sidebarCollapsed ? 'md:hidden' : ''}>Create SWO</span>
@@ -389,7 +388,7 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
             <span className={sidebarCollapsed ? 'md:hidden' : ''}>Daily Report</span>
           </Link>
 
-          {['Admin', 'MD', 'PM', 'CM'].includes(user?.role || '') && (
+          {canSeeApprovals(user?.role) && (
             <Link to="/approvals" className={`${navLinkClass('/approvals')} relative`} title="Approvals">
               <span className="relative inline-flex">
                 <ShieldAlert className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
@@ -421,7 +420,7 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
             )}
           </Link>
 
-          {['Admin', 'MD', 'GM', 'CD', 'PM'].includes(user?.role || '') && (
+          {canAccessAnalytics(user?.role) && (
             <Link to="/analytics" className={navLinkClass('/analytics')} title="Analytics">
               <BarChart3 className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
               <span className={sidebarCollapsed ? 'md:hidden' : ''}>Analytics</span>
@@ -433,14 +432,14 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
             <span className={sidebarCollapsed ? 'md:hidden' : ''}>Instruction Work Flow</span>
           </Link>
 
-          {(user?.role === 'Admin' || (user?.role as string) === 'Administrator') && (
+          {isSystemAdmin(user?.role) && (
             <>
               <div className={`mx-4 my-4 border-t border-gray-200 ${sidebarCollapsed ? 'md:mx-2' : ''}`} />
               <p className={`px-4 md:px-0 text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3 ${sidebarCollapsed ? 'md:hidden' : ''}`}>Administration</p>
             </>
           )}
 
-          {(user?.role === 'Admin' || (user?.role as string) === 'Administrator') && (
+          {isSystemAdmin(user?.role) && (
             <Link to="/admin" className={`${navLinkClass('/admin')} relative`} title="Admin Panel">
               <span className="relative inline-flex">
                 <Shield className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />

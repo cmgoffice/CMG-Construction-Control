@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from './AuthRBACRouter';
 import { FileCheck, CheckCircle2, X, Eye, Check, AlertCircle, XCircle, Clock, ChevronRight, ShieldAlert, Trash2, RefreshCw } from 'lucide-react';
 import { col, docRef, logActivity } from './firebase';
 import { onSnapshot, query, updateDoc, where, deleteDoc } from 'firebase/firestore';
 import { AlertModal, useAlert } from './AlertModal';
+import { canAccessAllProjects, hasUniversalRoleAccess, isSystemAdmin } from './roleUtils';
 
 // --- Daily Report View Modal (Review Report style: C1/C2/C3/Attachments) ---
 const DailyReportViewModal = ({ report, onClose }: { report: any; onClose: () => void }) => {
@@ -283,6 +284,8 @@ const SupervisorRejectionModal = ({ isOpen, onClose, swoData, onResubmit, onCanc
 // --- Propose Detail Site Work Completed Modal ---
 const ProposeDetailModal = ({ isOpen, onClose, swoData, onCmAccept, onCmReject, onPmAccept, onPmReject, onCdAccept, onCdReject, onMdAccept, onMdReject }: any) => {
     const { user } = useAuth();
+    const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+    const rejectSectionRef = useRef<HTMLDivElement | null>(null);
     const [cmNote, setCmNote] = useState('');
     const [pmNote, setPmNote] = useState('');
     const [pmQuality, setPmQuality] = useState('');
@@ -321,13 +324,24 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onCmAccept, onCmReject, 
         }
     }, [isOpen, swoData?.id]);
 
+    useEffect(() => {
+        if (!showRejectInput) return;
+        requestAnimationFrame(() => {
+            rejectSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            scrollContainerRef.current?.scrollTo({
+                top: scrollContainerRef.current.scrollHeight,
+                behavior: 'smooth'
+            });
+        });
+    }, [showRejectInput]);
+
     if (!isOpen || !swoData) return null;
 
     const status = swoData.closure_status || swoData.status;
-    const isCmEditable = user?.role === 'CM' && status === 'CM Review';
-    const isPmEditable = user?.role === 'PM' && status === 'PM Review';
-    const isCdEditable = user?.role === 'CD' && status === 'CD Review';
-    const isMdEditable = user?.role === 'MD' && status === 'MD Review';
+    const isCmEditable = (user?.role === 'CM' || hasUniversalRoleAccess(user?.role)) && status === 'CM Review';
+    const isPmEditable = (user?.role === 'PM' || hasUniversalRoleAccess(user?.role)) && status === 'PM Review';
+    const isCdEditable = (user?.role === 'CD' || hasUniversalRoleAccess(user?.role)) && status === 'CD Review';
+    const isMdEditable = (user?.role === 'MD' || hasUniversalRoleAccess(user?.role)) && status === 'MD Review';
     const isViewOnly = status === 'Closed SWO' || (!isCmEditable && !isPmEditable && !isCdEditable && !isMdEditable);
 
     let actualFinishDate = 'ยังไม่มีรายงาน';
@@ -368,7 +382,13 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onCmAccept, onCmReject, 
                     <h2 className="text-xl font-bold flex items-center gap-2">
                         <FileCheck className="w-6 h-6" /> Propose Detail Site Work Completed
                     </h2>
-                    <button onClick={onClose} className="text-white/80 hover:text-white"><X className="w-6 h-6" /></button>
+                    <button
+                        onClick={onClose}
+                        disabled={showRejectInput}
+                        className={`text-white/80 ${showRejectInput ? 'opacity-40 cursor-not-allowed' : 'hover:text-white'}`}
+                    >
+                        <X className="w-6 h-6" />
+                    </button>
                 </div>
 
                 {/* Flow progress bar */}
@@ -415,7 +435,7 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onCmAccept, onCmReject, 
                     </div>
                 )}
 
-                <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-gray-50/50">
+                <div ref={scrollContainerRef} className="p-6 overflow-y-auto space-y-6 flex-1 bg-gray-50/50">
                     {/* Summary Table */}
                     <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm bg-white">
                         <table className="w-full text-sm text-center text-nowrap">
@@ -556,7 +576,7 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onCmAccept, onCmReject, 
 
                     {/* Reject reason input */}
                     {showRejectInput && (
-                        <div className="bg-red-50 border border-red-200 rounded-xl p-5 space-y-3">
+                        <div ref={rejectSectionRef} className="bg-red-50 border border-red-200 rounded-xl p-5 space-y-3">
                             <h4 className="font-bold text-red-700 flex items-center gap-2"><AlertCircle className="w-4 h-4" /> ระบุเหตุผลการ Reject</h4>
                             <textarea rows={3} className="w-full border border-red-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-red-400 outline-none bg-white"
                                 placeholder="กรุณาระบุเหตุผล..." value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
@@ -572,7 +592,13 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onCmAccept, onCmReject, 
 
                 {/* Footer Actions */}
                 <div className="p-5 border-t border-gray-200 bg-white flex flex-wrap justify-end gap-3 rounded-b-2xl">
-                    <button onClick={onClose} className="px-5 py-2.5 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 font-medium">Close</button>
+                    <button
+                        onClick={onClose}
+                        disabled={showRejectInput}
+                        className={`px-5 py-2.5 border rounded-lg font-medium ${showRejectInput ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
+                    >
+                        Close
+                    </button>
 
                     {isCmEditable && !showRejectInput && (
                         <>
@@ -627,6 +653,8 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onCmAccept, onCmReject, 
 export const SWOCloseWorkflow = () => {
     const { user } = useAuth();
     const { showAlert, modalProps } = useAlert();
+    const hasUniversalAccess = hasUniversalRoleAccess(user?.role);
+    const isSupervisorLike = user?.role === 'Supervisor' || hasUniversalAccess;
     const [swos, setSwos] = useState<any[]>([]);
     const [supervisorDocId, setSupervisorDocId] = useState<string | null>(null);
     const [projects, setProjects] = useState<any[]>([]);
@@ -647,13 +675,13 @@ export const SWOCloseWorkflow = () => {
 
     // Resolve supervisor Firestore doc ID by email
     useEffect(() => {
-        if (user?.role !== 'Supervisor') return;
+        if (!isSupervisorLike || hasUniversalAccess || !user?.email) return;
         const unsub = onSnapshot(query(col("project_supervisors")), (snap) => {
             const found = snap.docs.find(d => d.data().email === user.email);
             setSupervisorDocId(found ? found.id : null);
         });
         return unsub;
-    }, [user]);
+    }, [hasUniversalAccess, isSupervisorLike, user]);
 
     // Fetch projects for projectNo lookup
     useEffect(() => {
@@ -683,11 +711,14 @@ export const SWOCloseWorkflow = () => {
                     const cs = swo.closure_status;
                     return cs === 'CM Review' || cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
                 }
-                if (user.role === 'Admin' || user.role === 'MD' || user.role === 'GM' || user.role === 'CD') {
+                if (hasUniversalRoleAccess(user.role)) {
+                    return true;
+                }
+                if (canAccessAllProjects(user.role)) {
                     const cs = swo.closure_status;
                     return cs === 'CM Review' || cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
                 }
-                if (user.role === 'Supervisor') {
+                if (isSupervisorLike) {
                     // Include SWOs assigned to this supervisor: in closure flow, rejected, or active/cancelled (can request closure)
                     const isAssigned = supervisorDocId ? swo.supervisor_id === supervisorDocId : swo.supervisor_name === user.name;
                     if (!isAssigned) return false;
@@ -1042,7 +1073,7 @@ export const SWOCloseWorkflow = () => {
                     </h2>
                     <p className="text-gray-500 mt-1 text-sm">Finalize SWO and propose detail site work completed.</p>
                 </div>
-                {user?.role === 'Supervisor' && (
+                {isSupervisorLike && (
                     <button
                         onClick={() => setIsReqModalOpen(true)}
                         className="px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 font-medium transition-colors flex items-center gap-2"
@@ -1070,8 +1101,8 @@ export const SWOCloseWorkflow = () => {
                         ) : swos.map(swo => {
                             const cs = swo.closure_status || 'Active';
                             const isClosed = cs === 'Closed SWO';
-                            const canCancel = user?.role === 'Supervisor' && cs === 'CM Review';
-                            const isRejectedBySupervisor = user?.role === 'Supervisor' && !cs && (swo.pm_reject_reason || swo.cm_reject_reason);
+                            const canCancel = isSupervisorLike && cs === 'CM Review';
+                            const isRejectedBySupervisor = isSupervisorLike && !cs && (swo.pm_reject_reason || swo.cm_reject_reason);
                             
                             return (
                                 <tr
@@ -1126,7 +1157,7 @@ export const SWOCloseWorkflow = () => {
                                                     >
                                                         <Eye className="w-3.5 h-3.5" /> View Details
                                                     </button>
-                                                    {user?.role === 'Admin' && (
+                                                    {isSystemAdmin(user?.role) && (
                                                         <button
                                                             onClick={() => { setDeleteTargetId(swo.id); setDeleteTargetNo(swo.swo_no || swo.id); }}
                                                             className="px-3 py-1.5 bg-red-600 text-white rounded hover:bg-red-700 font-medium text-xs transition-colors flex items-center gap-1"

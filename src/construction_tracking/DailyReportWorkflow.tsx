@@ -7,6 +7,7 @@ import { addDoc, onSnapshot, query, where, updateDoc, deleteDoc } from 'firebase
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import SWOCreationForm from './SWOCreationForm';
 import { AlertModal, useAlert } from './AlertModal';
+import { canAccessAllProjects, hasUniversalRoleAccess, isSystemAdmin } from './roleUtils';
 
 type ReportStatus = 'Pending CM' | 'Pending PM' | 'Approved' | 'Rejected';
 
@@ -41,6 +42,10 @@ export const DailyReportManager = () => {
     const { user } = useAuth();
     const { showAlert, showDelete, modalProps } = useAlert();
     const location = useLocation();
+    const hasUniversalAccess = hasUniversalRoleAccess(user?.role);
+    const isAdminLike = hasUniversalAccess;
+    const isSupervisorLike = user?.role === 'Supervisor' || hasUniversalAccess;
+    const canEditChangeRequestSwo = isAdminLike || user?.role === 'PM';
     const [selectedSwo, setSelectedSwo] = useState<any | null>(null);
     const [swos, setSwos] = useState<any[]>([]);
     const [supervisors, setSupervisors] = useState<any[]>([]);
@@ -164,7 +169,7 @@ export const DailyReportManager = () => {
         if (!user) return false;
         // Exclude SWOs with Draft status from the table
         if (swo.status === 'Draft') return false;
-        if (user.role === 'Admin' || user.role === 'MD' || user.role === 'GM' || user.role === 'CD') return true;
+        if (canAccessAllProjects(user.role)) return true;
         if (user.role === 'Supervisor') {
             const byUid = !!(user as any)?.uid && swo.supervisor_uid === (user as any).uid;
             const byName = swo.supervisor_name === (user as any).name;
@@ -194,7 +199,7 @@ export const DailyReportManager = () => {
     const closedSwoList = visibleSwoList.filter(swo => swo.closure_status === 'Closed SWO');
     const tabbedSwoList = swoStatusTab === 'closed' ? closedSwoList : openSwoList;
 
-    const isReadOnly = user?.role !== 'Supervisor' && user?.role !== 'Admin';
+    const isReadOnly = !isSupervisorLike && !isAdminLike;
 
     const handleDeleteSwo = (swoId: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -221,7 +226,7 @@ export const DailyReportManager = () => {
     };
 
     if (selectedSwo) {
-        if (selectedSwo.status === 'Assigned' && user?.role === 'Supervisor' && !selectedSwo.pending_change_acceptance) {
+        if (selectedSwo.status === 'Assigned' && isSupervisorLike && !selectedSwo.pending_change_acceptance) {
             return <SwoAcceptanceView
                 swo={selectedSwo}
                 allEquipments={equipmentsList}
@@ -232,7 +237,7 @@ export const DailyReportManager = () => {
         }
 
         // Non-Supervisor viewing an Assigned SWO: show view-only notice
-        if (selectedSwo.status === 'Assigned' && user?.role !== 'Supervisor') {
+        if (selectedSwo.status === 'Assigned' && !isSupervisorLike) {
             return (
                 <div className="max-w-4xl mx-auto space-y-6 pb-12">
                     <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
@@ -256,7 +261,7 @@ export const DailyReportManager = () => {
             );
         }
 
-        if ((user?.role === 'Admin' || user?.role === 'PM') && selectedSwo.status === 'Request Change') {
+        if (canEditChangeRequestSwo && selectedSwo.status === 'Request Change') {
             return <SWOCreationForm editSwo={selectedSwo} onCancelEdit={() => setSelectedSwo(null)} />;
         }
 
@@ -421,7 +426,7 @@ export const DailyReportManager = () => {
                                                     <span>รายงานล่าสุด: {item.prev_date}</span>
                                                     <span className="truncate max-w-[45%]" title={item.supervisor}>{item.supervisor}</span>
                                                 </div>
-                                                {(user?.role === 'Admin' || user?.role === 'PM') && (
+                                                {(isAdminLike || user?.role === 'PM') && (
                                                     <div className="mt-2 pt-2 border-t border-gray-100">
                                                         <button
                                                             type="button"
@@ -449,7 +454,7 @@ export const DailyReportManager = () => {
                                                 <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[10%]">SWO no.</th>
                                                 <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[22%]">Work Name/Scope</th>
                                                 <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[9%]">C1 Progress %</th>
-                                                {(user?.role === 'Admin' || user?.role === 'PM') && (
+                                                {(isAdminLike || user?.role === 'PM') && (
                                                     <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] w-[8%]">Actions</th>
                                                 )}
                                             </tr>
@@ -488,7 +493,7 @@ export const DailyReportManager = () => {
                                                             {item.c1_prog}
                                                         </span>
                                                     </td>
-                                                    {(user?.role === 'Admin' || user?.role === 'PM') && (
+                                                    {(isAdminLike || user?.role === 'PM') && (
                                                         <td className="px-3 py-1.5 bg-[#FFF5EE] group-hover:bg-[#ffe8d6]">
                                                             <button
                                                                 onClick={(e) => handleDeleteSwo(item.id, e)}
@@ -761,6 +766,9 @@ export const SwoChangeAcceptanceView = ({ swo, onBack, onActionComplete }: { swo
 export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = [], allTeams = [], initialDate }: { onBack?: () => void, swo: any, onSwoAccepted?: () => void, allEquipments?: any[], allTeams?: any[], initialDate?: string }) => {
     const { user } = useAuth();
     const { showAlert, modalProps: formModalProps } = useAlert();
+    const hasUniversalAccess = hasUniversalRoleAccess(user?.role);
+    const isAdminLike = hasUniversalAccess;
+    const isSupervisorLike = user?.role === 'Supervisor' || hasUniversalAccess;
 
     // --- Date navigation ---
     // Helper: format date as YYYY-MM-DD using LOCAL timezone (not UTC)
@@ -975,7 +983,7 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
 
     // Listen for pending change request on this SWO (Supervisor: hide "Request change" if one exists)
     React.useEffect(() => {
-        if (user?.role !== 'Supervisor' || !swo?.id) return;
+        if (!isSupervisorLike || !swo?.id) return;
         const q = query(col("swo_change_requests"), where("swo_id", "==", swo.id));
         const unsub = onSnapshot(q, (snapshot) => {
             const pending = snapshot.docs.find(d => {
@@ -985,7 +993,7 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
             setPendingChangeRequest(pending ? { id: pending.id, ...pending.data() } : null);
         });
         return unsub;
-    }, [user?.role, swo?.id]);
+    }, [isSupervisorLike, swo?.id]);
 
     const openRequestChangeModal = () => {
         setRequestChangeSelected({ c1: [], c2: [], c3: [] });
@@ -1104,8 +1112,8 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                     : (selectedDate === todayStr || selectedDate === yesterdayStr) && !isLockedByStatus;
     const isEditable =
         (swo?.closure_status) ? false
-            : user?.role === 'Admin' ? !isLockedByStatus
-                : user?.role === 'Supervisor' ? supervisorEditable
+            : isAdminLike ? !isLockedByStatus
+                : isSupervisorLike ? supervisorEditable
                     : false;
     const isReadOnly = !isEditable;
 
@@ -1306,26 +1314,26 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                     {reportStatus === 'Rejected' && !isEditable && existingReport?.rejected_at && (
                         <p className="text-xs text-red-600 mt-1 font-medium">⏱️ หมดเวลาการแก้ไข (2 วันนับจากวันถูก Reject)</p>
                     )}
-                    {user?.role === 'Supervisor' && reportStatus === 'none' && selectedDate < yesterdayStr && (
+                    {isSupervisorLike && reportStatus === 'none' && selectedDate < yesterdayStr && (
                         <p className="text-xs text-orange-500 mt-1 font-medium">📅 ส่งรายงานได้เฉพาะวันนี้และเมื่อวาน</p>
                     )}
-                    {user?.role === 'Supervisor' && reportStatus === 'none' && selectedDate === yesterdayStr && (
+                    {isSupervisorLike && reportStatus === 'none' && selectedDate === yesterdayStr && (
                         <p className="text-xs text-blue-600 mt-1 font-medium">📅 รายงานเมื่อวาน – สามารถส่งได้</p>
                     )}
-                    {user?.role === 'Supervisor' && reportStatus === 'none' && selectedDate < yesterdayStr && (
+                    {isSupervisorLike && reportStatus === 'none' && selectedDate < yesterdayStr && (
                         <p className="text-xs text-gray-500 mt-1 font-medium">📅 ดูข้อมูลย้อนหลัง (ส่งรายงานได้เฉพาะวันนี้และเมื่อวาน)</p>
                     )}
                     {swo?.closure_status && (
                         <p className="text-xs text-red-600 mt-1 font-medium">🔒 SWO ปิดแล้ว – ดูได้อย่างเดียว (กรอกข้อมูลไม่ได้)</p>
                     )}
-                    {user?.role !== 'Admin' && user?.role !== 'Supervisor' && !swo?.closure_status && (
+                    {!isAdminLike && !isSupervisorLike && !swo?.closure_status && (
                         <p className="text-xs text-red-500 mt-1 font-medium">🔒 View Only</p>
                     )}
                 </div>
             </div>
 
             {/* Supervisor: PM แก้ไขแล้ว — แถบแบน: มีคำขอรอ = แสดงเฉพาะ badge รอ CM/PM (ซ่อนปุ่มขอแก้ไขอีกครั้งและปุ่มยอมรับ); ไม่มีคำขอรอ = แสดงปุ่มขอแก้ไขอีกครั้ง + ยอมรับ */}
-            {user?.role === 'Supervisor' && swo?.pending_change_acceptance && (
+            {isSupervisorLike && swo?.pending_change_acceptance && (
                 <div className="bg-amber-50/90 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                         <Edit3 className="w-4 h-4 text-amber-600 shrink-0" />
@@ -1345,7 +1353,7 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
             )}
 
             {/* Supervisor: แถบเล็กแบน — ขอแก้ไขปริมาณงาน (เมื่อ SWO เป็น Accepted และยังไม่มีคำขอรอ) */}
-            {user?.role === 'Supervisor' && swo?.status === 'Accepted' && !swo?.pending_change_acceptance && (
+            {isSupervisorLike && swo?.status === 'Accepted' && !swo?.pending_change_acceptance && (
                 <div className="bg-amber-50/80 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                         <Edit3 className="w-4 h-4 text-amber-600 shrink-0" />
@@ -1708,6 +1716,7 @@ export const ApprovalDashboard = () => {
     const { user } = useAuth();
     const { showAlert, showDelete, modalProps: approvalModalProps } = useAlert();
     const location = useLocation();
+    const isAdminLike = hasUniversalRoleAccess(user?.role);
     const [reports, setReports] = useState<any[]>([]);
     const [selectedReport, setSelectedReport] = useState<string | null>(null);
     const [cmNotes, setCmNotes] = useState('');
@@ -1728,13 +1737,13 @@ export const ApprovalDashboard = () => {
         const q = query(col("swo_change_requests"));
         const unsub = onSnapshot(q, (snapshot) => {
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            const filtered = (user?.role === 'Admin' || user?.role === 'MD')
+            const filtered = (isAdminLike || user?.role === 'MD')
                 ? fetched
                 : fetched.filter((r: any) => (user as any)?.assigned_projects?.includes(r.project_id));
             setChangeRequests(filtered);
         });
         return unsub;
-    }, [user?.role, user?.uid]);
+    }, [isAdminLike, user?.role, user?.uid]);
 
     const pendingChangeRequests = changeRequests.filter((r: any) => r.status === 'Pending CM' || r.status === 'Pending PM');
     const selectedChangeRequest = changeRequests.find(r => r.id === selectedChangeId);
@@ -1767,14 +1776,14 @@ export const ApprovalDashboard = () => {
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
             // RBAC: Admin/MD see all reports; all other roles see only reports from their assigned projects
-            const filtered = (user?.role === 'Admin' || user?.role === 'MD')
+            const filtered = (isAdminLike || user?.role === 'MD')
                 ? fetched
                 : fetched.filter(r => (user as any)?.assigned_projects?.includes((r as any).project_id));
 
             setReports(filtered);
         });
         return unsub;
-    }, [user?.role, user?.uid]);
+    }, [isAdminLike, user?.role, user?.uid]);
 
     // Derive unique filter options from reports
     const uniqueSupervisors = Array.from(new Set(reports.map(r => r.supervisor || r.supervisor_name).filter(Boolean)));
@@ -1837,7 +1846,7 @@ export const ApprovalDashboard = () => {
     // PM: can hand-on CM step (Pending CM → Pending PM) AND final approve (Pending PM → Approved), can reject both
     // Admin: can do all actions on any status
     const canActOnReport = (report: any) => {
-        if (user?.role === 'Admin') return true;
+        if (isAdminLike) return true;
         if (user?.role === 'CM') return report.status === 'Pending CM';
         if (user?.role === 'PM') return report.status === 'Pending CM' || report.status === 'Pending PM';
         return false;
@@ -1845,7 +1854,7 @@ export const ApprovalDashboard = () => {
 
     const getApproveLabel = (report: any) => {
         if (report.status === 'Pending CM') {
-            if (user?.role === 'PM' || user?.role === 'Admin') return '⚡ Hand-on CM & Forward to PM';
+            if (user?.role === 'PM' || isAdminLike) return '⚡ Hand-on CM & Forward to PM';
             return '✅ Approve & Forward to PM';
         }
         return '✅ Final Approval (PM)';
@@ -1935,7 +1944,7 @@ export const ApprovalDashboard = () => {
         });
     };
 
-    const canDelete = user?.role === 'Admin';
+    const canDelete = isAdminLike;
 
     // --- Change Request: Open Edit Modal ---
     const openChangeEditModal = (req: any) => {
@@ -1988,8 +1997,8 @@ export const ApprovalDashboard = () => {
 
     const canApproveChangeRequest = (req: any) =>
         (
-            ((user?.role === 'CM' || user?.role === 'Admin') && req?.status === 'Pending CM') ||
-            ((user?.role === 'PM' || user?.role === 'Admin') && req?.status === 'Pending PM')
+            ((user?.role === 'CM' || isAdminLike) && req?.status === 'Pending CM') ||
+            ((user?.role === 'PM' || isAdminLike) && req?.status === 'Pending PM')
         );
 
     return (
@@ -2500,7 +2509,7 @@ export const ApprovalDashboard = () => {
                                         <button onClick={() => openRejectModal(report)} className="w-full sm:w-auto px-5 py-2.5 border-2 border-red-200 text-red-700 bg-red-50 hover:bg-red-100 rounded-xl font-bold transition-colors">
                                             ❌ Reject
                                         </button>
-                                        <button onClick={() => handleApprove(report)} className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold shadow-sm transition-colors text-white ${report.status === 'Pending CM' && (user?.role === 'PM' || user?.role === 'Admin') ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}>
+                                        <button onClick={() => handleApprove(report)} className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold shadow-sm transition-colors text-white ${report.status === 'Pending CM' && (user?.role === 'PM' || isAdminLike) ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}>
                                             {getApproveLabel(report)}
                                         </button>
                                     </div>

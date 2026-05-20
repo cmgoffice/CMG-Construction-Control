@@ -5,6 +5,7 @@ import { col, docRef, logActivity } from './firebase';
 import { onSnapshot, updateDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
 
 import { useAuthContext, AppUser, Role, Status } from './AuthContext';
+import { ALL_APP_ROLES, isSystemAdmin } from './roleUtils';
 
 import { Users, CheckCircle, Shield, XCircle, Edit3, Save, X, Trash2, Activity, LogIn, LogOut, Navigation } from 'lucide-react';
 
@@ -12,7 +13,7 @@ import { AlertModal, useAlert } from './AlertModal';
 
 
 
-const isAdmin = (role: string | undefined) => role === 'Admin' || role === 'Administrator';
+const isAdmin = (role: string | undefined) => isSystemAdmin(role);
 
 
 
@@ -299,7 +300,7 @@ export const AdminDashboard = () => {
 
 
 
-    const rolesList: Role[] = ['Admin', 'MD', 'GM', 'CD', 'PCM', 'HRM', 'PM', 'CM', 'Supervisor', 'Staff', 'HR', 'Procurement', 'Site Admin'];
+    const rolesList: Role[] = [...ALL_APP_ROLES];
 
     const statusList: Status[] = ['Pending', 'Approved', 'Rejected'];
 

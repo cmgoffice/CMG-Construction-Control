@@ -13,8 +13,9 @@ import {
 } from 'firebase/auth';
 import { getDoc, setDoc, getDocs, query, limit, onSnapshot } from 'firebase/firestore';
 import { auth, col, docRef, logActivity } from './firebase';
+import { ALL_APP_ROLES } from './roleUtils';
 
-export type Role = 'Admin' | 'MD' | 'GM' | 'CD' | 'PCM' | 'HRM' | 'PM' | 'CM' | 'Supervisor' | 'Staff' | 'HR' | 'Procurement' | 'Site Admin';
+export type Role = typeof ALL_APP_ROLES[number];
 export type Status = 'Pending' | 'Approved' | 'Rejected';
 
 const googleProvider = new GoogleAuthProvider();

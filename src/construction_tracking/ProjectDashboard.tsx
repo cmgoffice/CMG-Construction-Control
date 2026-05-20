@@ -4,6 +4,7 @@ import { col, docRef, logActivity } from './firebase';
 import { addDoc, onSnapshot, query, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Plus, Search, Building2, Users, Wrench, HardHat, ShieldCheck, X, Download, Upload, FileSpreadsheet } from 'lucide-react';
 import { AlertModal, useAlert } from './AlertModal';
+import { canAccessAllProjects, canManageProjectResources, canManageProjects } from './roleUtils';
 
 // --- Components ---
 
@@ -349,7 +350,7 @@ export default function ProjectDashboard() {
     // Live Firebase Projects
     const combinedProjects = [...realProjects];
     const visibleProjects = combinedProjects.filter(p => {
-        if (user?.role === 'Admin' || user?.role === 'MD' || user?.role === 'GM' || user?.role === 'CD') return true;
+        if (canAccessAllProjects(user?.role)) return true;
         return user?.assigned_projects?.includes(p.id);
     });
 
@@ -475,8 +476,8 @@ export default function ProjectDashboard() {
         </div>
     );
 
-    const canAddProject = user?.role === 'Admin' || user?.role === 'MD';
-    const canAddResource = user?.role === 'Admin' || user?.role === 'PM' || user?.role === 'CM';
+    const canAddProject = canManageProjects(user?.role);
+    const canAddResource = canManageProjectResources(user?.role);
 
     return (
         <div className="space-y-6">

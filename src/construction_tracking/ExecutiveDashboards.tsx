@@ -4,6 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { TrendingUp, Users, Clock, ShieldCheck, Activity } from 'lucide-react';
 import { col } from './firebase';
 import { onSnapshot, query } from 'firebase/firestore';
+import { canAccessAllProjects, isExecutiveRole } from './roleUtils';
 
 const COLORS = ['#22c55e', '#eab308', '#ef4444'];
 
@@ -38,9 +39,9 @@ export default function ExecutiveDashboards() {
         return () => { unsubProjects(); unsubSuperv(); unsubSwos(); unsubReports(); unsubUsers(); };
     }, []);
 
-    const isExecutive = ['Admin', 'MD', 'GM', 'CD'].includes(user?.role || '');
+    const isExecutive = isExecutiveRole(user?.role);
 
-    const isAdminExec = user?.role === 'Admin' || user?.role === 'MD' || user?.role === 'GM' || user?.role === 'CD';
+    const isAdminExec = canAccessAllProjects(user?.role);
 
     const visibleProjects = projects.filter(p => {
         if (isAdminExec) return true;
