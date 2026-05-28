@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle, XCircle, Clock, Save, Send, AlertTriangle, MessageSquare, FileText, Edit3 } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Save, Send, AlertTriangle, MessageSquare, FileText, Edit3, Trash2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthRBACRouter';
 import { col, docRef, storage, logActivity } from './firebase';
@@ -7,6 +7,7 @@ import { addDoc, onSnapshot, query, where, updateDoc, deleteDoc } from 'firebase
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import SWOCreationForm from './SWOCreationForm';
 import { AlertModal, useAlert } from './AlertModal';
+import { canAccessAllProjects, hasUniversalRoleAccess, isSystemAdmin } from './roleUtils';
 
 type ReportStatus = 'Pending CM' | 'Pending PM' | 'Approved' | 'Rejected';
 
@@ -37,17 +38,27 @@ const StatusBadge = ({ status, compact }: { status: ReportStatus; compact?: bool
     );
 };
 
+const formatProgressValue = (value: number | string | null | undefined) => {
+    return (Number(value) || 0).toFixed(2);
+};
+
 export const DailyReportManager = () => {
     const { user } = useAuth();
     const { showAlert, showDelete, modalProps } = useAlert();
     const location = useLocation();
+    const hasUniversalAccess = hasUniversalRoleAccess(user?.role);
+    const isAdminLike = hasUniversalAccess;
+    const isSupervisorLike = user?.role === 'Supervisor' || hasUniversalAccess;
+    const canEditChangeRequestSwo = isAdminLike || user?.role === 'PM';
     const [selectedSwo, setSelectedSwo] = useState<any | null>(null);
+    const [editingSwo, setEditingSwo] = useState<any | null>(null);
     const [swos, setSwos] = useState<any[]>([]);
     const [supervisors, setSupervisors] = useState<any[]>([]);
     const [equipmentsList, setEquipmentsList] = useState<any[]>([]);
     const [allTeamsList, setAllTeamsList] = useState<any[]>([]);
     const [projects, setProjects] = useState<any[]>([]);
     const [dailyReports, setDailyReports] = useState<any[]>([]);
+    const [users, setUsers] = useState<any[]>([]);
 
     React.useEffect(() => {
         const q1 = query(col("site_work_orders"));
@@ -68,7 +79,10 @@ export const DailyReportManager = () => {
         const q6 = query(col("daily_reports"));
         const unsub6 = onSnapshot(q6, (snapshot) => setDailyReports(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
 
-        return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); };
+        const q7 = query(col("users"));
+        const unsub7 = onSnapshot(q7, (snapshot) => setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+
+        return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); };
     }, []);
 
     // Auto-select SWO from notification navigation state
@@ -91,6 +105,7 @@ export const DailyReportManager = () => {
 
     // Date filter state (declared early because swoList computation depends on it)
     const [selectedDateFilter, setSelectedDateFilter] = useState<string>('');
+    const [swoStatusTab, setSwoStatusTab] = useState<'open' | 'closed'>('open');
     
     // Get unique dates from daily reports for the main date filter dropdown
     const availableDates = Array.from(new Set(dailyReports.map(r => r.date).filter(Boolean))).sort((a, b) => b.localeCompare(a)); // Sort dates descending (newest first)
@@ -99,7 +114,8 @@ export const DailyReportManager = () => {
     // When date filter is active, scope data to reports ON OR BEFORE that date
     const swoList = swos.map(swo => {
         const supData = supervisors.find(s => s.id === swo.supervisor_id);
-        const supervisorName = supData ? supData.name : 'Unknown';
+        const supUser = users.find(u => u.id === (swo.supervisor_uid || supData?.supervisor_uid));
+        const supervisorName = supData?.name || supUser ? `${supData?.name || `${supUser?.firstName || ''} ${supUser?.lastName || ''}`}`.trim() : (swo.supervisor_name || 'Unknown');
         const projectNo = getProjectNo(swo.project_id);
 
         // Get all daily reports for this SWO, scoped by date filter
@@ -149,7 +165,8 @@ export const DailyReportManager = () => {
             swo_no: swo.swo_no,
             scope: swo.work_name,
             c1_prog: c1Prog,
-            supervisor_name: supervisorName
+            supervisor_name: supervisorName,
+            supervisor_uid: swo.supervisor_uid || supData?.supervisor_uid || ''
         };
     });
 
@@ -157,8 +174,12 @@ export const DailyReportManager = () => {
         if (!user) return false;
         // Exclude SWOs with Draft status from the table
         if (swo.status === 'Draft') return false;
-        if (user.role === 'Admin' || user.role === 'MD' || user.role === 'GM' || user.role === 'CD') return true;
-        if (user.role === 'Supervisor') return swo.supervisor_name === (user as any).name;
+        if (canAccessAllProjects(user.role)) return true;
+        if (user.role === 'Supervisor') {
+            const byUid = !!(user as any)?.uid && swo.supervisor_uid === (user as any).uid;
+            const byName = swo.supervisor_name === (user as any).name;
+            return byUid || byName;
+        }
         return user.assigned_projects?.includes(swo.project_id_raw);
     });
 
@@ -179,8 +200,23 @@ export const DailyReportManager = () => {
                          !hasReports; // Include SWOs with no reports (Draft status)
         return matchProject && matchSupervisor && matchDate;
     });
+    const openSwoList = visibleSwoList.filter(swo => swo.closure_status !== 'Closed SWO');
+    const closedSwoList = visibleSwoList.filter(swo => swo.closure_status === 'Closed SWO');
+    const tabbedSwoList = swoStatusTab === 'closed' ? closedSwoList : openSwoList;
 
-    const isReadOnly = user?.role !== 'Supervisor' && user?.role !== 'Admin';
+    const isReadOnly = !isSupervisorLike && !isAdminLike;
+    const canManageActiveSwo = isAdminLike || user?.role === 'PM';
+    const canEditActiveSwo = (item: any) => {
+        const progress = parseFloat(item?.c1_prog || '0') || 0;
+        if (!canManageActiveSwo || item?.closure_status || item?.status === 'Draft') return false;
+        return progress < 100;
+    };
+
+    const openEditSwo = (swoId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        const found = swos.find(s => s.id === swoId);
+        if (found) setEditingSwo(found);
+    };
 
     const handleDeleteSwo = (swoId: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -206,8 +242,12 @@ export const DailyReportManager = () => {
         return styles[status] || 'bg-gray-100 text-gray-600';
     };
 
+    if (editingSwo) {
+        return <SWOCreationForm editSwo={editingSwo} onCancelEdit={() => setEditingSwo(null)} />;
+    }
+
     if (selectedSwo) {
-        if (selectedSwo.status === 'Assigned' && user?.role === 'Supervisor' && !selectedSwo.pending_change_acceptance) {
+        if (selectedSwo.status === 'Assigned' && isSupervisorLike && !selectedSwo.pending_change_acceptance) {
             return <SwoAcceptanceView
                 swo={selectedSwo}
                 allEquipments={equipmentsList}
@@ -218,7 +258,7 @@ export const DailyReportManager = () => {
         }
 
         // Non-Supervisor viewing an Assigned SWO: show view-only notice
-        if (selectedSwo.status === 'Assigned' && user?.role !== 'Supervisor') {
+        if (selectedSwo.status === 'Assigned' && !isSupervisorLike) {
             return (
                 <div className="max-w-4xl mx-auto space-y-6 pb-12">
                     <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
@@ -242,7 +282,7 @@ export const DailyReportManager = () => {
             );
         }
 
-        if ((user?.role === 'Admin' || user?.role === 'PM') && selectedSwo.status === 'Request Change') {
+        if (canEditChangeRequestSwo && selectedSwo.status === 'Request Change') {
             return <SWOCreationForm editSwo={selectedSwo} onCancelEdit={() => setSelectedSwo(null)} />;
         }
 
@@ -258,11 +298,41 @@ export const DailyReportManager = () => {
 
     return (
         <div className="max-w-7xl mx-auto space-y-6">
+            <style>{`
+                @keyframes rejectedStrobe {
+                    0% { outline-color: rgba(239, 68, 68, 0.12); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.0), 0 0 0 0 rgba(239, 68, 68, 0.0); }
+                    50% { outline-color: rgba(239, 68, 68, 0.45); box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.22), 0 0 14px 3px rgba(248, 113, 113, 0.45); }
+                    100% { outline-color: rgba(239, 68, 68, 0.12); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.0), 0 0 0 0 rgba(239, 68, 68, 0.0); }
+                }
+                .rejected-strobe {
+                    outline: 1px solid transparent;
+                    outline-offset: -1px;
+                    animation: rejectedStrobe 1.1s steps(2, end) infinite;
+                }
+            `}</style>
             <AlertModal {...modalProps} />
             <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3 flex-wrap bg-white px-4 py-3 rounded-xl border border-gray-200 shadow-sm">
                 <div>
                     <h1 className="text-lg font-bold text-gray-900">Site Work Order list (SWO)</h1>
                     <p className="text-gray-500 text-xs mt-0.5">Select an SWO below to complete your Daily Progress Report.</p>
+                </div>
+                <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+                    <button
+                        type="button"
+                        onClick={() => setSwoStatusTab('open')}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${swoStatusTab === 'open' ? 'bg-white text-blue-700 shadow-sm border border-blue-100' : 'text-gray-600 hover:text-gray-800'}`}
+                    >
+                        SWO Active
+                        <span className="ml-1.5 text-[10px] text-gray-500">({openSwoList.length})</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setSwoStatusTab('closed')}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${swoStatusTab === 'closed' ? 'bg-white text-red-700 shadow-sm border border-red-100' : 'text-gray-600 hover:text-gray-800'}`}
+                    >
+                        SWO Status: Closed
+                        <span className="ml-1.5 text-[10px] text-gray-500">({closedSwoList.length})</span>
+                    </button>
                 </div>
 
                 {/* Filters */}
@@ -324,10 +394,10 @@ export const DailyReportManager = () => {
 
             {/* Group by project: one table per project; hide table if project has no items */}
             {(() => {
-                const byProject = visibleSwoList.reduce((acc, item) => {
+                const byProject = tabbedSwoList.reduce((acc, item) => {
                     const p = item.project_no || 'Unknown';
                     if (!acc[p]) acc[p] = []; acc[p].push(item); return acc;
-                }, {} as Record<string, typeof visibleSwoList>);
+                }, {} as Record<string, typeof tabbedSwoList>);
                 const projectOrder = Object.keys(byProject).sort();
                 if (projectOrder.length === 0) {
                     return (
@@ -341,6 +411,7 @@ export const DailyReportManager = () => {
                         {projectOrder.map(projectNo => {
                             const rows = byProject[projectNo];
                             if (!rows || rows.length === 0) return null;
+                            const sortedRows = rows;
                             return (
                                 <div key={projectNo} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                                     <div className="px-3 py-1.5 bg-[#CCE5FF] border-b border-gray-200 font-semibold text-gray-800 text-[10px] md:text-xs">
@@ -349,11 +420,11 @@ export const DailyReportManager = () => {
 
                                     {/* Mobile: card list */}
                                     <div className="md:hidden divide-y divide-gray-100">
-                                        {rows.map(item => (
+                                        {sortedRows.map(item => (
                                             <div
                                                 key={item.id}
                                                 onClick={() => setSelectedSwo(swos.find(s => s.id === item.id))}
-                                                className="p-3 active:bg-gray-50 transition-colors cursor-pointer"
+                                                className={`p-3 active:bg-gray-50 transition-colors cursor-pointer ${swoStatusTab === 'open' && item.task_status === 'Rejected' ? 'rejected-strobe' : ''}`}
                                             >
                                                 <div className="flex items-start justify-between gap-2">
                                                     <div className="min-w-0 flex-1">
@@ -362,9 +433,35 @@ export const DailyReportManager = () => {
                                                         <p className="text-[10px] text-gray-500 mt-1">Work Name/Scope</p>
                                                         <p className="text-xs text-gray-800 truncate">{item.scope}</p>
                                                     </div>
-                                                    <span className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-bold ${parseFloat(item.c1_prog) >= 100 ? 'bg-green-100 text-green-700' : parseFloat(item.c1_prog) > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                                                        {item.c1_prog}
-                                                    </span>
+                                                    <div className="shrink-0 flex items-center gap-1">
+                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${parseFloat(item.c1_prog) >= 100 ? 'bg-green-100 text-green-700' : parseFloat(item.c1_prog) > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                            {item.c1_prog}
+                                                        </span>
+                                                        {canManageActiveSwo && (
+                                                            <span className="inline-flex items-center gap-0.5">
+                                                                {canEditActiveSwo(item) && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => openEditSwo(item.id, e)}
+                                                                        title="Edit / Reassign"
+                                                                        aria-label="Edit / Reassign SWO"
+                                                                        className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 hover:text-blue-800"
+                                                                    >
+                                                                        <Edit3 className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); handleDeleteSwo(item.id, e); }}
+                                                                    title="Delete SWO"
+                                                                    aria-label="Delete SWO"
+                                                                    className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-red-200 bg-white text-red-500 hover:bg-red-50 hover:text-red-700"
+                                                                >
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <div className="flex flex-wrap gap-1.5 mt-2">
                                                     <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${item.closure_status ? 'text-red-700 bg-red-50' : item.status === 'Accepted' ? 'text-green-600 bg-green-50' : item.status === 'Assigned' ? 'text-blue-600 bg-blue-50' : item.status === 'Request Change' ? 'text-orange-600 bg-orange-50' : item.status === 'Draft' ? 'text-purple-600 bg-purple-50' : 'text-gray-600 bg-gray-100'}`}>
@@ -376,17 +473,6 @@ export const DailyReportManager = () => {
                                                     <span>รายงานล่าสุด: {item.prev_date}</span>
                                                     <span className="truncate max-w-[45%]" title={item.supervisor}>{item.supervisor}</span>
                                                 </div>
-                                                {(user?.role === 'Admin' || user?.role === 'PM') && (
-                                                    <div className="mt-2 pt-2 border-t border-gray-100">
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => { e.stopPropagation(); handleDeleteSwo(item.id, e); }}
-                                                            className="text-red-500 hover:text-red-700 text-[10px] font-semibold"
-                                                        >
-                                                            ลบ SWO
-                                                        </button>
-                                                    </div>
-                                                )}
                                             </div>
                                         ))}
                                     </div>
@@ -404,14 +490,14 @@ export const DailyReportManager = () => {
                                                 <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[10%]">SWO no.</th>
                                                 <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[22%]">Work Name/Scope</th>
                                                 <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] border-r border-gray-300 w-[9%]">C1 Progress %</th>
-                                                {(user?.role === 'Admin' || user?.role === 'PM') && (
-                                                    <th className="px-3 py-1.5 text-xs font-semibold bg-[#FFE6CC] w-[8%]">Actions</th>
+                                                {canManageActiveSwo && (
+                                                    <th className="px-2 py-1.5 text-xs font-semibold bg-[#FFE6CC] w-[7%]">Actions</th>
                                                 )}
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-200">
-                                            {rows.map(item => (
-                                                <tr key={item.id} onClick={() => setSelectedSwo(swos.find(s => s.id === item.id))} className="hover:bg-gray-100 transition-colors cursor-pointer group">
+                                            {sortedRows.map(item => (
+                                                <tr key={item.id} onClick={() => setSelectedSwo(swos.find(s => s.id === item.id))} className={`hover:bg-gray-100 transition-colors cursor-pointer group ${swoStatusTab === 'open' && item.task_status === 'Rejected' ? 'rejected-strobe' : ''}`}>
                                                     <td className="px-3 py-1.5 border-r border-gray-200 bg-[#E6F2FF] group-hover:bg-[#cce6ff] text-xs font-medium truncate" title={item.project_no}>{item.project_no}</td>
                                                     <td className="px-2 py-1 border-r border-gray-200 bg-[#E6FFFF] group-hover:bg-[#ccffff] align-top min-w-0">
                                                         <span className={`inline-block font-medium text-[10px] leading-tight px-1.5 py-0.5 rounded ${item.closure_status
@@ -443,14 +529,30 @@ export const DailyReportManager = () => {
                                                             {item.c1_prog}
                                                         </span>
                                                     </td>
-                                                    {(user?.role === 'Admin' || user?.role === 'PM') && (
-                                                        <td className="px-3 py-1.5 bg-[#FFF5EE] group-hover:bg-[#ffe8d6]">
+                                                    {canManageActiveSwo && (
+                                                        <td className="px-2 py-1 bg-[#FFF5EE] group-hover:bg-[#ffe8d6]">
+                                                            <div className="flex items-center justify-center gap-1">
+                                                                {canEditActiveSwo(item) && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => openEditSwo(item.id, e)}
+                                                                        title="Edit / Reassign"
+                                                                        aria-label="Edit / Reassign SWO"
+                                                                        className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 hover:text-blue-800 transition-colors"
+                                                                    >
+                                                                        <Edit3 className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                )}
                                                             <button
+                                                                type="button"
                                                                 onClick={(e) => handleDeleteSwo(item.id, e)}
-                                                                className="text-red-500 hover:text-red-700 bg-white border border-red-200 hover:bg-red-50 px-2 py-0.5 rounded-md transition-colors text-xs font-semibold"
+                                                                title="Delete SWO"
+                                                                aria-label="Delete SWO"
+                                                                className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-red-200 bg-white text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
                                                             >
-                                                                Delete
+                                                                <Trash2 className="w-3.5 h-3.5" />
                                                             </button>
+                                                            </div>
                                                         </td>
                                                     )}
                                                 </tr>
@@ -716,6 +818,9 @@ export const SwoChangeAcceptanceView = ({ swo, onBack, onActionComplete }: { swo
 export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = [], allTeams = [], initialDate }: { onBack?: () => void, swo: any, onSwoAccepted?: () => void, allEquipments?: any[], allTeams?: any[], initialDate?: string }) => {
     const { user } = useAuth();
     const { showAlert, modalProps: formModalProps } = useAlert();
+    const hasUniversalAccess = hasUniversalRoleAccess(user?.role);
+    const isAdminLike = hasUniversalAccess;
+    const isSupervisorLike = user?.role === 'Supervisor' || hasUniversalAccess;
 
     // --- Date navigation ---
     // Helper: format date as YYYY-MM-DD using LOCAL timezone (not UTC)
@@ -930,7 +1035,7 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
 
     // Listen for pending change request on this SWO (Supervisor: hide "Request change" if one exists)
     React.useEffect(() => {
-        if (user?.role !== 'Supervisor' || !swo?.id) return;
+        if (!isSupervisorLike || !swo?.id) return;
         const q = query(col("swo_change_requests"), where("swo_id", "==", swo.id));
         const unsub = onSnapshot(q, (snapshot) => {
             const pending = snapshot.docs.find(d => {
@@ -940,7 +1045,7 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
             setPendingChangeRequest(pending ? { id: pending.id, ...pending.data() } : null);
         });
         return unsub;
-    }, [user?.role, swo?.id]);
+    }, [isSupervisorLike, swo?.id]);
 
     const openRequestChangeModal = () => {
         setRequestChangeSelected({ c1: [], c2: [], c3: [] });
@@ -1005,7 +1110,7 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                 });
             }
             setRequestChangeModalOpen(false);
-            showAlert('success', 'ส่งคำขอแก้ไขแล้ว', 'คำขอแก้ไขถูกส่งไปยัง CM และ PM แล้ว');
+            showAlert('success', 'ส่งคำขอแก้ไขแล้ว', 'คำขอแก้ไขถูกส่งไปยัง CM แล้ว');
         } catch (e: any) {
             showAlert('error', 'เกิดข้อผิดพลาด', e.message);
         }
@@ -1046,6 +1151,14 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
     // --- Role + Status based read-only logic ---
     const reportStatus: string = existingReport?.status || 'none';
     const isLockedByStatus = reportStatus === 'Approved' || reportStatus === 'Pending CM' || reportStatus === 'Pending PM';
+    const reportSupervisorName = existingReport?.supervisor_name || existingReport?.supervisor || '';
+    const reportSupervisorUid = existingReport?.supervisor_uid || '';
+    const currentUserOwnsExistingReport =
+        !existingReport ||
+        (!!user?.uid && reportSupervisorUid === user.uid) ||
+        (!!user?.name && reportSupervisorName === user.name);
+    const existingReportBelongsToAnotherSupervisor =
+        !!existingReport && isSupervisorLike && !isAdminLike && !currentUserOwnsExistingReport;
 
     // Admin: locked only when already Approved (cannot re-edit approved)
     // Supervisor: (1) Closed SWO → cannot edit; (2) Pending change acceptance → cannot submit until accept; (3) Rejected → within 2 days; (4) else → today/yesterday
@@ -1054,23 +1167,43 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
             ? false
             : (swo?.pending_change_acceptance)
                 ? false
-                : reportStatus === 'Rejected'
-                    ? isRejectedWithinTwoDays(existingReport)
-                    : (selectedDate === todayStr || selectedDate === yesterdayStr) && !isLockedByStatus;
+                : existingReportBelongsToAnotherSupervisor
+                    ? false
+                    : reportStatus === 'Rejected'
+                        ? isRejectedWithinTwoDays(existingReport)
+                        : (selectedDate === todayStr || selectedDate === yesterdayStr) && !isLockedByStatus;
     const isEditable =
         (swo?.closure_status) ? false
-            : user?.role === 'Admin' ? !isLockedByStatus
-                : user?.role === 'Supervisor' ? supervisorEditable
+            : isAdminLike ? !isLockedByStatus
+                : isSupervisorLike ? supervisorEditable
                     : false;
     const isReadOnly = !isEditable;
+
+    const clampTodayProgress = (todayValue: number, activity: any) => {
+        const total = Number(activity.total) || 0;
+        const prevTotal = Number(activity.prev_total) || 0;
+        const remaining = Math.max(0, total - prevTotal);
+        return Math.max(0, Math.min(todayValue, remaining));
+    };
 
     // --- Handlers ---
     // Keep today as string while typing so "0.0", "0.03" don't disappear (parseFloat("0.") => 0 would clear the input)
     const handleActivityChange = (id: string, val: string) => {
-        let sanitized = val.replace(/[^\d.]/g, '');
+        let sanitized = val.replace(/,/g, '.').replace(/[^\d.]/g, '');
         const firstDot = sanitized.indexOf('.');
         if (firstDot >= 0) sanitized = sanitized.slice(0, firstDot + 1) + sanitized.slice(firstDot + 1).replace(/\./g, '');
-        setActivities(activities.map((a: any) => a.id === id ? { ...a, today: sanitized } : a));
+        setActivities(activities.map((a: any) => {
+            if (a.id !== id) return a;
+            if (sanitized === '' || sanitized === '.') return { ...a, today: '' };
+            const parsed = parseFloat(sanitized);
+            if (Number.isNaN(parsed)) return { ...a, today: '' };
+            if (sanitized.endsWith('.')) {
+                const clamped = clampTodayProgress(parsed, a);
+                return { ...a, today: clamped < parsed ? String(clamped) : sanitized };
+            }
+            const clamped = clampTodayProgress(parsed, a);
+            return { ...a, today: String(clamped) };
+        }));
     };
 
     const handleSubmit = async () => {
@@ -1113,10 +1246,16 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                 project_no: getProjectNo(swo.project_id),
                 supervisor: user?.name || swo.supervisor_id,
                 supervisor_name: user?.name || '',
+                supervisor_uid: user?.uid || swo.supervisor_uid || '',
                 work_name: swo.work_name || '',
                 status: 'Pending CM' as const,
                 cm_notes: '',
-                activities: activities.map((a: any) => ({ ...a, today: parseFloat(String(a.today)) || 0 })),
+                created_at: new Date().toISOString(),
+                activities: activities.map((a: any) => {
+                    const parsedToday = parseFloat(String(a.today)) || 0;
+                    const clampedToday = clampTodayProgress(parsedToday, a);
+                    return { ...a, today: clampedToday };
+                }),
                 equipments,
                 workers,
                 notes,
@@ -1191,6 +1330,11 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                         <p className={`mt-2 text-lg font-bold ${swo?.closure_status ? 'text-red-700 bg-red-50 px-3 py-1.5 rounded-lg inline-block' : 'text-gray-700'}`}>
                             SWO Status: {swo?.closure_status ? `Closed - ${swo.closure_status}` : (swo?.status || 'Active')}
                         </p>
+                        {existingReport && reportSupervisorName && (
+                            <p className="mt-2 text-sm font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-lg inline-block">
+                                Report Owner: Supervisor {reportSupervisorName}
+                            </p>
+                        )}
                         <div className="flex flex-col sm:flex-row gap-4 mt-2">
                             <div className="flex items-center gap-2 text-gray-600">
                                 <span className="font-medium">Start Date:</span>
@@ -1241,34 +1385,37 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                     {reportStatus === 'Rejected' && !isEditable && existingReport?.rejected_at && (
                         <p className="text-xs text-red-600 mt-1 font-medium">⏱️ หมดเวลาการแก้ไข (2 วันนับจากวันถูก Reject)</p>
                     )}
-                    {user?.role === 'Supervisor' && reportStatus === 'none' && selectedDate < yesterdayStr && (
+                    {isSupervisorLike && reportStatus === 'none' && selectedDate < yesterdayStr && (
                         <p className="text-xs text-orange-500 mt-1 font-medium">📅 ส่งรายงานได้เฉพาะวันนี้และเมื่อวาน</p>
                     )}
-                    {user?.role === 'Supervisor' && reportStatus === 'none' && selectedDate === yesterdayStr && (
+                    {isSupervisorLike && reportStatus === 'none' && selectedDate === yesterdayStr && (
                         <p className="text-xs text-blue-600 mt-1 font-medium">📅 รายงานเมื่อวาน – สามารถส่งได้</p>
                     )}
-                    {user?.role === 'Supervisor' && reportStatus === 'none' && selectedDate < yesterdayStr && (
+                    {isSupervisorLike && reportStatus === 'none' && selectedDate < yesterdayStr && (
                         <p className="text-xs text-gray-500 mt-1 font-medium">📅 ดูข้อมูลย้อนหลัง (ส่งรายงานได้เฉพาะวันนี้และเมื่อวาน)</p>
+                    )}
+                    {existingReportBelongsToAnotherSupervisor && (
+                        <p className="text-xs text-indigo-600 mt-1 font-medium">รายงานนี้เป็นของ Supervisor {reportSupervisorName} - ดูได้อย่างเดียว</p>
                     )}
                     {swo?.closure_status && (
                         <p className="text-xs text-red-600 mt-1 font-medium">🔒 SWO ปิดแล้ว – ดูได้อย่างเดียว (กรอกข้อมูลไม่ได้)</p>
                     )}
-                    {user?.role !== 'Admin' && user?.role !== 'Supervisor' && !swo?.closure_status && (
+                    {!isAdminLike && !isSupervisorLike && !swo?.closure_status && (
                         <p className="text-xs text-red-500 mt-1 font-medium">🔒 View Only</p>
                     )}
                 </div>
             </div>
 
             {/* Supervisor: PM แก้ไขแล้ว — แถบแบน: มีคำขอรอ = แสดงเฉพาะ badge รอ CM/PM (ซ่อนปุ่มขอแก้ไขอีกครั้งและปุ่มยอมรับ); ไม่มีคำขอรอ = แสดงปุ่มขอแก้ไขอีกครั้ง + ยอมรับ */}
-            {user?.role === 'Supervisor' && swo?.pending_change_acceptance && (
+            {isSupervisorLike && swo?.pending_change_acceptance && (
                 <div className="bg-amber-50/90 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                         <Edit3 className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span className="text-amber-800 text-sm font-medium truncate">ขอแก้ไขปริมาณงาน (C1/C2/C3) คำขอจะส่งไปยัง CM – PM</span>
+                        <span className="text-amber-800 text-sm font-medium truncate">ขอแก้ไขปริมาณงาน (C1/C2/C3) คำขอจะส่งไปยัง CM</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                         {pendingChangeRequest ? (
-                            <span className="text-xs font-medium text-amber-700 bg-amber-100 border border-amber-200 px-2 py-1 rounded">รอ CM/PM ({pendingChangeRequest.status})</span>
+                            <span className="text-xs font-medium text-amber-700 bg-amber-100 border border-amber-200 px-2 py-1 rounded">รอ CM ({pendingChangeRequest.status})</span>
                         ) : (
                             <>
                                 <button type="button" onClick={openRequestChangeModal} disabled={requestingChange} className="px-3 py-1.5 text-amber-700 border border-amber-300 rounded-lg text-sm font-medium bg-white hover:bg-amber-100 cursor-pointer disabled:opacity-50">ขอแก้ไขอีกครั้ง</button>
@@ -1280,15 +1427,15 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
             )}
 
             {/* Supervisor: แถบเล็กแบน — ขอแก้ไขปริมาณงาน (เมื่อ SWO เป็น Accepted และยังไม่มีคำขอรอ) */}
-            {user?.role === 'Supervisor' && swo?.status === 'Accepted' && !swo?.pending_change_acceptance && (
+            {isSupervisorLike && swo?.status === 'Accepted' && !swo?.pending_change_acceptance && (
                 <div className="bg-amber-50/80 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                         <Edit3 className="w-4 h-4 text-amber-600 shrink-0" />
                         <span className="text-amber-800 text-sm font-medium truncate">ขอแก้ไขปริมาณงาน (C1/C2/C3)</span>
-                        <span className="text-amber-600 text-xs hidden sm:inline">คำขอจะส่งไปยัง CM → PM</span>
+                        <span className="text-amber-600 text-xs hidden sm:inline">คำขอจะส่งไปยัง CM</span>
                     </div>
                     {pendingChangeRequest ? (
-                        <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-1 rounded shrink-0">รอ CM/PM ({pendingChangeRequest.status})</span>
+                        <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-1 rounded shrink-0">รอ CM ({pendingChangeRequest.status})</span>
                     ) : (
                         <button type="button" onClick={openRequestChangeModal} disabled={requestingChange} className="shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg flex items-center gap-1">
                             <Edit3 className="w-3.5 h-3.5" /> ขอแก้ไข
@@ -1454,14 +1601,16 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                     <tbody className="divide-y divide-gray-100">
                         {activities.map((a: any) => {
                             const todayNum = parseFloat(String(a.today)) || 0;
-                            const upToDate = a.prev_total + todayNum;
-                            const percent = ((upToDate / a.total) * 100).toFixed(1);
+                            const clampedTodayNum = clampTodayProgress(todayNum, a);
+                            const upToDate = Math.min((Number(a.total) || 0), (Number(a.prev_total) || 0) + clampedTodayNum);
+                            const percentNum = (Number(a.total) || 0) > 0 ? Math.min(100, (upToDate / Number(a.total)) * 100) : 0;
+                            const percent = percentNum.toFixed(1);
 
                             return (
                                 <tr key={a.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4 font-medium text-gray-800">{a.desc}</td>
                                     <td className="px-6 py-4">{a.total} {a.unit}</td>
-                                    <td className="px-6 py-4 text-gray-500">{a.prev_total} {a.unit}</td>
+                                    <td className="px-6 py-4 text-gray-500">{formatProgressValue(a.prev_total)} {a.unit}</td>
                                     <td className="px-6 py-4 bg-blue-50/10">
                                         <div className="flex items-center gap-2">
                                             <input
@@ -1476,11 +1625,11 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                                             <span className="text-xs text-gray-500">{a.unit}</span>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-right font-semibold text-gray-800">{upToDate} {a.unit}</td>
+                                    <td className="px-6 py-4 text-right font-semibold text-gray-800">{formatProgressValue(upToDate)} {a.unit}</td>
                                     <td className="px-6 py-4 text-right">
-                                        <span className={`px-2 py-1 rounded text-xs font-bold ${percent === 'Infinity' ? 'bg-yellow-100 text-yellow-700' : parseFloat(percent) >= 100 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                                        <span className={`px-2 py-1 rounded text-xs font-bold ${parseFloat(percent) >= 100 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                                             }`}>
-                                            {percent === 'NaN' || percent === 'Infinity' ? '0.0' : percent}%
+                                            {percent}%
                                         </span>
                                     </td>
                                 </tr>
@@ -1641,6 +1790,7 @@ export const ApprovalDashboard = () => {
     const { user } = useAuth();
     const { showAlert, showDelete, modalProps: approvalModalProps } = useAlert();
     const location = useLocation();
+    const isAdminLike = hasUniversalRoleAccess(user?.role);
     const [reports, setReports] = useState<any[]>([]);
     const [selectedReport, setSelectedReport] = useState<string | null>(null);
     const [cmNotes, setCmNotes] = useState('');
@@ -1661,13 +1811,13 @@ export const ApprovalDashboard = () => {
         const q = query(col("swo_change_requests"));
         const unsub = onSnapshot(q, (snapshot) => {
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            const filtered = (user?.role === 'Admin' || user?.role === 'MD')
+            const filtered = (isAdminLike || user?.role === 'MD')
                 ? fetched
                 : fetched.filter((r: any) => (user as any)?.assigned_projects?.includes(r.project_id));
             setChangeRequests(filtered);
         });
         return unsub;
-    }, [user?.role, user?.uid]);
+    }, [isAdminLike, user?.role, user?.uid]);
 
     const pendingChangeRequests = changeRequests.filter((r: any) => r.status === 'Pending CM' || r.status === 'Pending PM');
     const selectedChangeRequest = changeRequests.find(r => r.id === selectedChangeId);
@@ -1700,14 +1850,14 @@ export const ApprovalDashboard = () => {
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
             // RBAC: Admin/MD see all reports; all other roles see only reports from their assigned projects
-            const filtered = (user?.role === 'Admin' || user?.role === 'MD')
+            const filtered = (isAdminLike || user?.role === 'MD')
                 ? fetched
                 : fetched.filter(r => (user as any)?.assigned_projects?.includes((r as any).project_id));
 
             setReports(filtered);
         });
         return unsub;
-    }, [user?.role, user?.uid]);
+    }, [isAdminLike, user?.role, user?.uid]);
 
     // Derive unique filter options from reports
     const uniqueSupervisors = Array.from(new Set(reports.map(r => r.supervisor || r.supervisor_name).filter(Boolean)));
@@ -1770,7 +1920,7 @@ export const ApprovalDashboard = () => {
     // PM: can hand-on CM step (Pending CM → Pending PM) AND final approve (Pending PM → Approved), can reject both
     // Admin: can do all actions on any status
     const canActOnReport = (report: any) => {
-        if (user?.role === 'Admin') return true;
+        if (isAdminLike) return true;
         if (user?.role === 'CM') return report.status === 'Pending CM';
         if (user?.role === 'PM') return report.status === 'Pending CM' || report.status === 'Pending PM';
         return false;
@@ -1778,7 +1928,7 @@ export const ApprovalDashboard = () => {
 
     const getApproveLabel = (report: any) => {
         if (report.status === 'Pending CM') {
-            if (user?.role === 'PM' || user?.role === 'Admin') return '⚡ Hand-on CM & Forward to PM';
+            if (user?.role === 'PM' || isAdminLike) return '⚡ Hand-on CM & Forward to PM';
             return '✅ Approve & Forward to PM';
         }
         return '✅ Final Approval (PM)';
@@ -1793,10 +1943,12 @@ export const ApprovalDashboard = () => {
             if (report.status === 'Pending CM') {
                 updateData.cm_notes = cmNotes;
                 updateData.cm_approved_by = user?.name || user?.role;
+                updateData.cm_approved_at = new Date().toISOString();
             }
             if (nextStatus === 'Approved') {
                 updateData.pm_notes = cmNotes;
                 updateData.pm_approved_by = user?.name || user?.role;
+                updateData.pm_approved_at = new Date().toISOString();
             }
             
             await updateDoc(docRef("daily_reports", report.id), updateData);
@@ -1866,20 +2018,9 @@ export const ApprovalDashboard = () => {
         });
     };
 
-    const canDelete = user?.role === 'Admin';
+    const canDelete = isAdminLike;
 
-    // --- Change Request: CM Forward to PM ---
-    const handleChangeRequestForward = async (req: any) => {
-        try {
-            await updateDoc(docRef("swo_change_requests", req.id), { status: 'Pending PM' });
-            if (user) {
-                await logActivity({ uid: user.uid, name: user.name, role: user.role, action: 'Forward', menu: 'Change Request', detail: `Forward change request SWO ${req.swo_no} to PM` });
-            }
-            showAlert('success', 'ส่งต่อ PM แล้ว', 'คำขอแก้ไขถูกส่งไปยัง PM แล้ว');
-        } catch (e: any) { showAlert('error', 'เกิดข้อผิดพลาด', e.message); }
-    };
-
-    // --- Change Request: PM Open Edit Modal ---
+    // --- Change Request: Open Edit Modal ---
     const openChangeEditModal = (req: any) => {
         setChangeEditModal({ open: true, req });
         setChangeEditDraft({
@@ -1889,7 +2030,7 @@ export const ApprovalDashboard = () => {
         });
     };
 
-    // --- Change Request: PM Submit (apply draft to SWO, set Assigned + pending_change_acceptance) ---
+    // --- Change Request: CM/PM Submit (apply draft to SWO, set Assigned + pending_change_acceptance) ---
     const handleChangeRequestApply = async () => {
         const req = changeEditModal.req;
         if (!req || !changeEditDraft) return;
@@ -1928,8 +2069,11 @@ export const ApprovalDashboard = () => {
         } catch (e: any) { showAlert('error', 'เกิดข้อผิดพลาด', e.message); }
     };
 
-    const canForwardChangeRequest = (req: any) => (user?.role === 'CM' || user?.role === 'PM' || user?.role === 'Admin') && req?.status === 'Pending CM';
-    const canApproveChangeRequest = (req: any) => (user?.role === 'PM' || user?.role === 'Admin') && req?.status === 'Pending PM';
+    const canApproveChangeRequest = (req: any) =>
+        (
+            ((user?.role === 'CM' || user?.role === 'PM' || isAdminLike) && req?.status === 'Pending CM') ||
+            ((user?.role === 'PM' || isAdminLike) && req?.status === 'Pending PM')
+        );
 
     return (
         <div className="flex flex-col lg:flex-row min-h-[calc(100vh-8rem)] lg:h-[calc(100vh-8rem)] gap-4 lg:gap-6 pb-6 lg:pb-12">
@@ -2220,9 +2364,6 @@ export const ApprovalDashboard = () => {
                                     </div>
                                 </div>
                                 <div className="flex flex-wrap gap-3 pt-4 border-t">
-                                    {canForwardChangeRequest(selectedChangeRequest) && (
-                                        <button onClick={() => handleChangeRequestForward(selectedChangeRequest)} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl">ส่งต่อ PM</button>
-                                    )}
                                     {canApproveChangeRequest(selectedChangeRequest) && (
                                         <button onClick={() => openChangeEditModal(selectedChangeRequest)} className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl">อนุมัติและแก้ไขปริมาณ/ราคา</button>
                                     )}
@@ -2266,18 +2407,20 @@ export const ApprovalDashboard = () => {
                                             </thead>
                                             <tbody className="divide-y divide-gray-100">
                                                 {(report.activities || []).map((a: any, i: number) => {
-                                                    const upToDate = (a.prev_total || 0) + (a.today || 0);
-                                                    const percent = a.total > 0 ? ((upToDate / a.total) * 100).toFixed(1) : '0.0';
+                                                    const total = Number(a.total) || 0;
+                                                    const rawUpToDate = (Number(a.prev_total) || 0) + (Number(a.today) || 0);
+                                                    const upToDate = Math.min(total, rawUpToDate);
+                                                    const percent = total > 0 ? Math.min(100, (upToDate / total) * 100).toFixed(1) : '0.0';
                                                     return (
                                                         <tr key={i} className="hover:bg-gray-50">
                                                             <td className="px-4 py-3 font-medium text-gray-800">{a.desc || a.description || '-'}</td>
                                                             <td className="px-4 py-3">{a.total} {a.unit}</td>
-                                                            <td className="px-4 py-3 text-gray-500">{a.prev_total || 0} {a.unit}</td>
+                                                            <td className="px-4 py-3 text-gray-500">{formatProgressValue(a.prev_total)} {a.unit}</td>
                                                             <td className="px-4 py-3 bg-blue-50/10">
                                                                 <span className="w-24 inline-block text-right font-bold text-blue-700">{a.today || 0}</span>
                                                                 <span className="text-xs text-gray-500 ml-1">{a.unit}</span>
                                                             </td>
-                                                            <td className="px-4 py-3 text-right font-semibold text-gray-800">{upToDate} {a.unit}</td>
+                                                            <td className="px-4 py-3 text-right font-semibold text-gray-800">{formatProgressValue(upToDate)} {a.unit}</td>
                                                             <td className="px-4 py-3 text-right">
                                                                 <span className={`px-2 py-1 rounded text-xs font-bold ${parseFloat(percent) >= 100 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
                                                                     {percent}%
@@ -2440,7 +2583,7 @@ export const ApprovalDashboard = () => {
                                         <button onClick={() => openRejectModal(report)} className="w-full sm:w-auto px-5 py-2.5 border-2 border-red-200 text-red-700 bg-red-50 hover:bg-red-100 rounded-xl font-bold transition-colors">
                                             ❌ Reject
                                         </button>
-                                        <button onClick={() => handleApprove(report)} className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold shadow-sm transition-colors text-white ${report.status === 'Pending CM' && (user?.role === 'PM' || user?.role === 'Admin') ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}>
+                                        <button onClick={() => handleApprove(report)} className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold shadow-sm transition-colors text-white ${report.status === 'Pending CM' && (user?.role === 'PM' || isAdminLike) ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}>
                                             {getApproveLabel(report)}
                                         </button>
                                     </div>

@@ -4,6 +4,7 @@ import { col, docRef, logActivity } from './firebase';
 import { addDoc, onSnapshot, query, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Plus, Search, Building2, Users, Wrench, HardHat, ShieldCheck, X, Download, Upload, FileSpreadsheet } from 'lucide-react';
 import { AlertModal, useAlert } from './AlertModal';
+import { canAccessAllProjects, canManageProjectResources, canManageProjects } from './roleUtils';
 
 // --- Components ---
 
@@ -59,7 +60,7 @@ export default function ProjectDashboard() {
     const [a2ViewMode, setA2ViewMode] = useState(false);
     const [editingA2Id, setEditingA2Id] = useState<string | null>(null);
     const [a2FormData, setA2FormData] = useState({
-        project_id: '', name: '', scope_type: 'Civil&Building',
+        project_id: '', supervisor_uid: '', name: '', scope_type: 'Civil&Building',
         start_date: '', finish_date: '', format: 'OT', note: ''
     });
 
@@ -206,7 +207,7 @@ export default function ProjectDashboard() {
         setA2ViewMode(false);
         setEditingA2Id(null);
         setA2FormData({
-            project_id: currentProject?.id || '', name: '', scope_type: 'Civil&Building',
+            project_id: currentProject?.id || '', supervisor_uid: '', name: '', scope_type: 'Civil&Building',
             start_date: '', finish_date: '', format: 'OT', note: ''
         });
     };
@@ -214,12 +215,19 @@ export default function ProjectDashboard() {
     const handleSaveA2 = async () => {
         setIsSaving(true);
         try {
+            const selectedSupervisor = usersList.find(u => u.id === a2FormData.supervisor_uid);
+            const payload = {
+                ...a2FormData,
+                name: selectedSupervisor ? `${selectedSupervisor.firstName} ${selectedSupervisor.lastName}` : a2FormData.name,
+                email: selectedSupervisor?.email || '',
+                supervisor_uid: a2FormData.supervisor_uid || selectedSupervisor?.id || ''
+            };
             if (editingA2Id) {
-                await updateDoc(docRef("project_supervisors", editingA2Id), { ...a2FormData });
+                await updateDoc(docRef("project_supervisors", editingA2Id), payload);
                 showAlert('success', 'อัปเดตสำเร็จ', 'ข้อมูล Supervisor ได้รับการอัปเดตแล้ว');
             } else {
                 await addDoc(col("project_supervisors"), {
-                    ...a2FormData, created_at: new Date()
+                    ...payload, created_at: new Date()
                 });
                 showAlert('success', 'เพิ่มสำเร็จ', 'เพิ่ม Supervisor เรียบร้อยแล้ว');
             }
@@ -231,11 +239,11 @@ export default function ProjectDashboard() {
     };
 
     const handleViewA2 = (sup: any) => {
-        setA2FormData({ ...sup }); setA2ViewMode(true); setEditingA2Id(null); setIsA2ModalOpen(true);
+        setA2FormData({ supervisor_uid: sup.supervisor_uid || '', ...sup }); setA2ViewMode(true); setEditingA2Id(null); setIsA2ModalOpen(true);
     };
 
     const handleEditA2 = (sup: any) => {
-        setA2FormData({ ...sup }); setA2ViewMode(false); setEditingA2Id(sup.id); setIsA2ModalOpen(true);
+        setA2FormData({ supervisor_uid: sup.supervisor_uid || '', ...sup }); setA2ViewMode(false); setEditingA2Id(sup.id); setIsA2ModalOpen(true);
     };
 
     const handleDeleteA2 = (sup: any) => {
@@ -342,7 +350,7 @@ export default function ProjectDashboard() {
     // Live Firebase Projects
     const combinedProjects = [...realProjects];
     const visibleProjects = combinedProjects.filter(p => {
-        if (user?.role === 'Admin' || user?.role === 'MD' || user?.role === 'GM' || user?.role === 'CD') return true;
+        if (canAccessAllProjects(user?.role)) return true;
         return user?.assigned_projects?.includes(p.id);
     });
 
@@ -468,8 +476,8 @@ export default function ProjectDashboard() {
         </div>
     );
 
-    const canAddProject = user?.role === 'Admin' || user?.role === 'MD';
-    const canAddResource = user?.role === 'Admin' || user?.role === 'PM' || user?.role === 'CM';
+    const canAddProject = canManageProjects(user?.role);
+    const canAddResource = canManageProjectResources(user?.role);
 
     return (
         <div className="space-y-6">
@@ -1091,16 +1099,22 @@ export default function ProjectDashboard() {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor Name</label>
                                     <select
                                         disabled={a2ViewMode || !a2FormData.project_id}
-                                        value={a2FormData.name}
-                                        onChange={(e) => setA2FormData({ ...a2FormData, name: e.target.value })}
+                                        value={a2FormData.supervisor_uid}
+                                        onChange={(e) => {
+                                            const selectedSupervisor = usersList.find(u => u.id === e.target.value);
+                                            setA2FormData({
+                                                ...a2FormData,
+                                                supervisor_uid: e.target.value,
+                                                name: selectedSupervisor ? `${selectedSupervisor.firstName} ${selectedSupervisor.lastName}` : ''
+                                            });
+                                        }}
                                         className="w-full p-2 border border-gray-300 rounded-md bg-cyan-50 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"
                                     >
                                         <option value="">-- Select Supervisor --</option>
                                         {usersList
                                             .filter(u => u.role === 'Supervisor')
-                                            .filter(u => !a2FormData.project_id || (u.assigned_projects && u.assigned_projects.includes(a2FormData.project_id)))
                                             .map(u => (
-                                                <option key={u.id} value={`${u.firstName} ${u.lastName}`}>{u.firstName} {u.lastName}</option>
+                                                <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
                                             ))}
                                     </select>
                                     {!a2FormData.project_id && <p className="text-xs text-orange-500 mt-1">Please select a project first.</p>}

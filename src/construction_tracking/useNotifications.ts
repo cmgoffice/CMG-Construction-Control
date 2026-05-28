@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { onSnapshot, query } from 'firebase/firestore';
 import { col } from './firebase';
+import { hasUniversalRoleAccess, isSystemAdmin } from './roleUtils';
 
 export type NotificationType = 'assigned' | 'rejected' | 'pending_cm' | 'pending_pm' | 'change_request' | 'swo_change_request' | 'closure_review' | 'closure_rejected';
 
@@ -61,7 +62,7 @@ export const useNotifications = (user: {
     const uid = user.uid || '';
     const userName = user.name || '';
     const assignedProjects = user.assigned_projects || [];
-    const isAdminOrMD = role === 'Admin' || role === 'MD';
+    const isAdminOrMD = hasUniversalRoleAccess(role) || role === 'MD';
 
     // Filter helpers
     const swoInScope = (swo: any) =>
@@ -70,10 +71,9 @@ export const useNotifications = (user: {
     const reportInScope = (r: any) =>
         isAdminOrMD || assignedProjects.includes(r.project_id);
 
-    // Match SWO assigned to this supervisor:
-    // - by supervisor_name (stored since latest fix) OR
-    // - by supervisor_id === uid (legacy ClosureWorkflows pattern)
+    // Match SWO assigned to this supervisor by auth UID, with legacy fallbacks.
     const swoIsMineSupervisor = (swo: any) =>
+        (uid && swo.supervisor_uid === uid) ||
         (userName && swo.supervisor_name === userName) ||
         (uid && swo.supervisor_id === uid);
 
@@ -180,6 +180,22 @@ export const useNotifications = (user: {
             type: 'swo_change_request',
             step: 'Pending CM — ส่งต่อ PM',
             targetId: r.id
+        }));
+    }
+
+    // --- CM: SWOs waiting for closure review ---
+    if (role === 'CM') {
+        const closurePending = swos.filter(s =>
+            s.closure_status === 'CM Review' &&
+            swoInScope(s)
+        );
+        closurePending.forEach(s => items.push({
+            id: `closure-cm-${s.id}`,
+            label: `SWO ${s.swo_no || s.id}: ${s.work_name || ''} — รอ CM อนุมัติปิด SWO`,
+            path: '/closures',
+            type: 'closure_review',
+            step: 'รอ CM Review',
+            targetId: s.id
         }));
     }
 
@@ -295,7 +311,7 @@ export const useNotifications = (user: {
     }
 
     // --- Admin: all pending approvals + change requests + closure reviews ---
-    if (role === 'Admin') {
+    if (isSystemAdmin(role)) {
         const pendingCM = reports.filter(r => r.status === 'Pending CM');
         pendingCM.forEach(r => items.push({
             id: `report-admin-cm-${r.id}`,
@@ -339,6 +355,7 @@ export const useNotifications = (user: {
 
         // Admin can see all closure reviews
         const closurePending = swos.filter(s => 
+            s.closure_status === 'CM Review' || 
             s.closure_status === 'PM Review' || 
             s.closure_status === 'CD Review' || 
             s.closure_status === 'MD Review'

@@ -7,14 +7,13 @@ import {
     User as FirebaseUser,
     sendPasswordResetEmail,
     GoogleAuthProvider,
-    signInWithPopup,
-    setPersistence,
-    browserSessionPersistence
+    signInWithPopup
 } from 'firebase/auth';
 import { getDoc, setDoc, getDocs, query, limit, onSnapshot } from 'firebase/firestore';
 import { auth, col, docRef, logActivity } from './firebase';
+import { ALL_APP_ROLES } from './roleUtils';
 
-export type Role = 'Admin' | 'MD' | 'GM' | 'CD' | 'PCM' | 'HRM' | 'PM' | 'CM' | 'Supervisor' | 'Staff' | 'HR' | 'Procurement' | 'Site Admin';
+export type Role = typeof ALL_APP_ROLES[number];
 export type Status = 'Pending' | 'Approved' | 'Rejected';
 
 const googleProvider = new GoogleAuthProvider();
@@ -56,38 +55,63 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     useEffect(() => {
         let unsubscribeSnapshot: (() => void) | null = null;
+        let isMounted = true;
 
-        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-            setCurrentUser(user);
+        const clearUserState = () => {
+            if (!isMounted) return;
+            setCurrentUser(null);
+            setAppUser(null);
+        };
+
+        const handleAuthStateChange = async (user: FirebaseUser | null) => {
+            if (!isMounted) return;
+
+            if (unsubscribeSnapshot) {
+                unsubscribeSnapshot();
+                unsubscribeSnapshot = null;
+            }
+
             if (!user) {
-                setAppUser(null);
+                clearUserState();
                 setLoading(false);
-                if (unsubscribeSnapshot) {
-                    unsubscribeSnapshot();
-                    unsubscribeSnapshot = null;
-                }
                 return;
             }
+
+            setCurrentUser(user);
             // Subscribe to current user's document so when Admin updates role/assigned_projects, it takes effect immediately without refresh
             const userDocRef = docRef('users', user.uid);
             unsubscribeSnapshot = onSnapshot(
                 userDocRef,
-                (snap) => {
-                    if (snap.exists()) {
-                        setAppUser({ uid: user.uid, ...snap.data() } as AppUser);
-                    } else {
-                        setAppUser(null);
+                async (snap) => {
+                    if (!snap.exists()) {
+                        await signOut(auth);
+                        clearUserState();
+                        if (isMounted) setLoading(false);
+                        return;
                     }
-                    setLoading(false);
+
+                    const userData = snap.data() as Omit<AppUser, 'uid'>;
+                    if (userData.status !== 'Approved') {
+                        await signOut(auth);
+                        clearUserState();
+                        if (isMounted) setLoading(false);
+                        return;
+                    }
+
+                    setAppUser({ uid: user.uid, ...userData });
+                    if (isMounted) setLoading(false);
                 },
                 () => {
-                    setAppUser(null);
-                    setLoading(false);
+                    clearUserState();
+                    if (isMounted) setLoading(false);
                 }
             );
-        });
+        };
+
+        const unsubscribeAuth = onAuthStateChanged(auth, handleAuthStateChange);
 
         return () => {
+            isMounted = false;
             if (unsubscribeSnapshot) unsubscribeSnapshot();
             unsubscribeAuth();
         };
@@ -130,7 +154,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const login = async (email: string, password: string) => {
-        await setPersistence(auth, browserSessionPersistence);
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
@@ -163,7 +186,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const loginWithGoogle = async () => {
-        await setPersistence(auth, browserSessionPersistence);
         const result = await signInWithPopup(auth, googleProvider);
         const user = result.user;
 

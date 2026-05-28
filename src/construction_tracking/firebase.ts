@@ -1,6 +1,12 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore, addDoc, collection, doc } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import {
+    initializeAuth,
+    browserLocalPersistence,
+    browserSessionPersistence,
+    indexedDBLocalPersistence,
+    browserPopupRedirectResolver
+} from "firebase/auth";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
@@ -15,7 +21,14 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
-export const auth = getAuth(app);
+export const auth = initializeAuth(app, {
+    persistence: [
+        indexedDBLocalPersistence,
+        browserLocalPersistence,
+        browserSessionPersistence
+    ],
+    popupRedirectResolver: browserPopupRedirectResolver
+});
 export const storage = getStorage(app);
 
 /** Base path: ConstructionControlData/root (all app data lives under this) */

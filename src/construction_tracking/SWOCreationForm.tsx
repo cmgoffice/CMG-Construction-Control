@@ -4,6 +4,7 @@ import { col, docRef, logActivity } from './firebase';
 import { onSnapshot, query, addDoc, updateDoc, getDocs, where, deleteDoc } from 'firebase/firestore';
 import { useAuth } from './AuthRBACRouter';
 import { AlertModal, useAlert } from './AlertModal';
+import { canAccessAllProjects } from './roleUtils';
 
 export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: any, onCancelEdit?: () => void }) {
     const { user } = useAuth();
@@ -57,7 +58,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
 
     const activeProjects = realProjects.filter(p => {
         if (!user) return false;
-        if (user.role === 'Admin' || user.role === 'MD' || user.role === 'GM' || user.role === 'CD') return true;
+        if (canAccessAllProjects(user.role)) return true;
         return user.assigned_projects?.includes(p.id);
     });
 
@@ -151,7 +152,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
     // Filter drafts by user's accessible projects
     const visibleDrafts = drafts.filter(d => {
         if (!user) return false;
-        if (user.role === 'Admin' || user.role === 'MD' || user.role === 'GM' || user.role === 'CD') return true;
+        if (canAccessAllProjects(user.role)) return true;
         return user.assigned_projects?.includes(d.project_id);
     });
 
@@ -232,6 +233,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                 swo_no: formData.swo_no,
                 work_name: formData.work_name,
                 supervisor_id: formData.supervisor_id,
+                supervisor_uid: selectedSupervisor?.supervisor_uid || '',
                 supervisor_name: selectedSupervisor?.name || '',
                 activities,
                 equipmentList,
@@ -293,6 +295,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                 swo_no: formData.swo_no,
                 work_name: formData.work_name,
                 supervisor_id: formData.supervisor_id,
+                supervisor_uid: selectedSupervisor?.supervisor_uid || '',
                 supervisor_name: selectedSupervisor?.name || '',
                 activities,
                 equipmentList,
@@ -388,11 +391,31 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
             }
 
             const selectedSupervisor = realSupervisors.find(s => s.id === formData.supervisor_id);
-            const payload = {
+            const nowIso = new Date().toISOString();
+            const supervisorChanged = !!editSwo && formData.supervisor_id !== editSwo.supervisor_id;
+            const existingAssignmentHistory = Array.isArray(editSwo?.supervisor_assignment_history)
+                ? editSwo.supervisor_assignment_history
+                : [];
+            const reassignmentEntry = supervisorChanged ? {
+                from_supervisor_id: editSwo?.supervisor_id || '',
+                from_supervisor_uid: editSwo?.supervisor_uid || '',
+                from_supervisor_name: editSwo?.supervisor_name || '',
+                to_supervisor_id: formData.supervisor_id,
+                to_supervisor_uid: selectedSupervisor?.supervisor_uid || '',
+                to_supervisor_name: selectedSupervisor?.name || '',
+                reassigned_at: nowIso,
+                reassigned_by_uid: user?.uid || '',
+                reassigned_by_name: user?.name || '',
+                reassigned_by_role: user?.role || '',
+                previous_status: editSwo?.status || ''
+            } : null;
+
+            const payload: any = {
                 project_id: formData.project_id,
                 swo_no: finalSwoNo,
                 work_name: formData.work_name,
                 supervisor_id: formData.supervisor_id,
+                supervisor_uid: selectedSupervisor?.supervisor_uid || '',
                 supervisor_name: selectedSupervisor?.name || '',
                 activities,
                 equipmentList,
@@ -401,12 +424,39 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                 start_date: formData.start_date,
                 finish_date: formData.finish_date,
                 status: 'Assigned', // Back to assigned when created or resubmitted
-                updated_at: new Date().toISOString()
+                pending_change_acceptance: false,
+                change_reason: null,
+                updated_at: nowIso,
+                updated_by_uid: user?.uid || '',
+                updated_by_name: user?.name || ''
             };
+            if (reassignmentEntry) {
+                payload.supervisor_assignment_history = [...existingAssignmentHistory, reassignmentEntry];
+                payload.last_reassigned_at = nowIso;
+                payload.last_reassigned_by = user?.name || '';
+            }
 
             if (editSwo) {
                 await updateDoc(docRef("site_work_orders", editSwo.id), payload);
-                showAlert('success', 'อัปเดตสำเร็จ', `SWO ${finalSwoNo} ได้รับการอัปเดตเรียบร้อยแล้ว`);
+                if (user) {
+                    await logActivity({
+                        uid: user.uid,
+                        name: user.name,
+                        role: user.role,
+                        action: supervisorChanged ? 'Reassign' : 'Update',
+                        menu: 'Create SWO',
+                        detail: supervisorChanged
+                            ? `Reassign SWO No. ${finalSwoNo} from ${editSwo.supervisor_name || '-'} to ${selectedSupervisor?.name || '-'}`
+                            : `Update SWO No. ${finalSwoNo} - ${formData.work_name}`
+                    });
+                }
+                showAlert(
+                    'success',
+                    supervisorChanged ? 'โอนงานสำเร็จ' : 'อัปเดตสำเร็จ',
+                    supervisorChanged
+                        ? `SWO ${finalSwoNo} ถูก Assign ให้ ${selectedSupervisor?.name || 'Supervisor ใหม่'} แล้ว และรอการกดรับงาน`
+                        : `SWO ${finalSwoNo} ได้รับการอัปเดตและส่งกลับไปรอ Supervisor กดรับงาน`
+                );
                 if (onCancelEdit) onCancelEdit();
             } else if (editingDraftId) {
                 // Promote draft to real SWO
@@ -707,10 +757,17 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
                     </button>
                     <div className="flex-1">
-                        <h1 className="text-2xl font-bold text-gray-900">Edit SWO (Change Requested)</h1>
+                        <h1 className="text-2xl font-bold text-gray-900">
+                            {editSwo.status === 'Request Change' ? 'Edit SWO (Change Requested)' : 'Edit / Reassign SWO'}
+                        </h1>
                         {editSwo.change_reason && (
                             <div className="mt-2 text-sm text-red-600 font-medium">
                                 <strong>Supervisor's Reason:</strong> {editSwo.change_reason}
+                            </div>
+                        )}
+                        {editSwo.status !== 'Request Change' && (
+                            <div className="mt-2 text-sm text-gray-600 font-medium">
+                                Current Supervisor: <span className="text-gray-900">{editSwo.supervisor_name || '-'}</span>
                             </div>
                         )}
                     </div>
@@ -1056,7 +1113,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                                     Cancel
                                 </button>
                                 <button type="submit" form="swo-form" className="px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center shadow-sm">
-                                    <Send className="w-4 h-4 mr-2" /> Update SWO
+                                    <Send className="w-4 h-4 mr-2" /> {editSwo.status === 'Request Change' ? 'Update SWO' : 'Update & Assign'}
                                 </button>
                             </>
                         ) : (
