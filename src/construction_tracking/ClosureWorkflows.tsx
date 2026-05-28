@@ -322,7 +322,7 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onPmAccept, onPmReject, 
     if (!isOpen || !swoData) return null;
 
     const status = swoData.status;
-    const isPmEditable = user?.role === 'PM' && status === 'PM Review';
+    const isPmEditable = user?.role === 'PM' && (status === 'PM Review' || status === 'CM Review');
     const isCdEditable = user?.role === 'CD' && status === 'CD Review';
     const isMdEditable = user?.role === 'MD' && status === 'MD Review';
     const isViewOnly = status === 'Closed SWO' || (!isPmEditable && !isCdEditable && !isMdEditable);
@@ -352,7 +352,7 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onPmAccept, onPmReject, 
     };
 
     // Flow status indicator
-    const flowSteps = ['PM Review', 'CD Review', 'MD Review', 'Closed SWO'];
+    const flowSteps = ['CM Review', 'PM Review', 'CD Review', 'MD Review', 'Closed SWO'];
     const currentStepIdx = flowSteps.indexOf(status);
 
     return (
@@ -633,11 +633,11 @@ export const SWOCloseWorkflow = () => {
                     const inMyProjects = user.assigned_projects?.includes(swo.project_id);
                     if (!inMyProjects) return false;
                     const cs = swo.closure_status;
-                    return cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
+                    return cs === 'CM Review' || cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
                 }
                 if (user.role === 'Admin' || user.role === 'MD' || user.role === 'GM' || user.role === 'CD') {
                     const cs = swo.closure_status;
-                    return cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
+                    return cs === 'CM Review' || cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
                 }
                 if (user.role === 'Supervisor') {
                     // Include SWOs assigned to this supervisor: in closure flow, rejected, or active/cancelled (can request closure)
@@ -645,7 +645,7 @@ export const SWOCloseWorkflow = () => {
                     if (!isAssigned) return false;
                     
                     const cs = swo.closure_status;
-                    const isInClosureFlow = cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
+                    const isInClosureFlow = cs === 'CM Review' || cs === 'PM Review' || cs === 'CD Review' || cs === 'MD Review' || cs === 'Closed SWO';
                     const isRejected = !cs && swo.pm_reject_reason;
                     const isActiveOrCancelled = !cs; // no closure status = can request closure (including after cancel)
                     
@@ -658,7 +658,7 @@ export const SWOCloseWorkflow = () => {
             const nonDraft = visible.filter((swo: any) => swo.status !== 'Draft');
 
             // Sort by closure urgency
-            const order: Record<string, number> = { 'PM Review': 1, 'CD Review': 2, 'MD Review': 3, 'Closed SWO': 4 };
+            const order: Record<string, number> = { 'CM Review': 0, 'PM Review': 1, 'CD Review': 2, 'MD Review': 3, 'Closed SWO': 4 };
             nonDraft.sort((a: any, b: any) =>
                 (order[a.closure_status] || 99) - (order[b.closure_status] || 99)
             );
@@ -926,6 +926,7 @@ export const SWOCloseWorkflow = () => {
     const requestableSwos = swos.filter(s => !s.closure_status);
 
     const getStatusBadge = (status: string) => {
+        if (status === 'CM Review') return 'bg-yellow-100 text-yellow-700';
         if (status === 'PM Review') return 'bg-blue-100 text-blue-700';
         if (status === 'CD Review') return 'bg-indigo-100 text-indigo-700';
         if (status === 'MD Review') return 'bg-purple-100 text-purple-700';

@@ -1928,7 +1928,7 @@ export const ApprovalDashboard = () => {
         } catch (e: any) { showAlert('error', 'เกิดข้อผิดพลาด', e.message); }
     };
 
-    const canForwardChangeRequest = (req: any) => (user?.role === 'CM' || user?.role === 'Admin') && req?.status === 'Pending CM';
+    const canForwardChangeRequest = (req: any) => (user?.role === 'CM' || user?.role === 'PM' || user?.role === 'Admin') && req?.status === 'Pending CM';
     const canApproveChangeRequest = (req: any) => (user?.role === 'PM' || user?.role === 'Admin') && req?.status === 'Pending PM';
 
     return (
