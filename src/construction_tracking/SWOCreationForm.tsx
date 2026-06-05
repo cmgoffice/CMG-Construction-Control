@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Save, Send, HardHat, FileText, Wrench, Users, Download, Upload, FileSpreadsheet, X } from 'lucide-react';
-import { col, docRef, logActivity } from './firebase';
-import { onSnapshot, query, addDoc, updateDoc, getDocs, where, deleteDoc } from 'firebase/firestore';
+import { col, docRef, logActivity, masterDb } from './firebase';
+import { onSnapshot, query, addDoc, updateDoc, getDocs, where, deleteDoc, collection } from 'firebase/firestore';
 import { useAuth } from './AuthRBACRouter';
 import { AlertModal, useAlert } from './AlertModal';
 import { canAccessAllProjects } from './roleUtils';
@@ -10,6 +10,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
     const { user } = useAuth();
     const { showAlert, showConfirm, showDelete, modalProps } = useAlert();
     const [realProjects, setRealProjects] = useState<any[]>([]);
+    const [masterProjects, setMasterProjects] = useState<any[]>([]);
     const [realSupervisors, setRealSupervisors] = useState<any[]>([]);
     const [realEquipments, setRealEquipments] = useState<any[]>([]);
     const [realTeams, setRealTeams] = useState<any[]>([]);
@@ -24,6 +25,19 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
         const qProjects = query(col("projects"));
         const unsubProjects = onSnapshot(qProjects, (snapshot) => {
             setRealProjects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }, (err) => console.error(err));
+
+        const masterQ = query(collection(masterDb, "artifacts", "cmg-budget-control-default", "public", "data", "projects"));
+        const unsubMaster = onSnapshot(masterQ, (snapshot) => {
+            setMasterProjects(snapshot.docs.map(doc => {
+                const data = doc.data();
+                return { 
+                    id: doc.id, 
+                    ...data, 
+                    no: data.jobNo || data.no || '-', 
+                    isMaster: true 
+                };
+            }));
         }, (err) => console.error(err));
 
         const qSupervisors = query(col("project_supervisors"));
@@ -53,11 +67,27 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
             setDrafts(all);
         });
 
-        return () => { unsubProjects(); unsubSupervisors(); unsubEqm(); unsubTeams(); unsubSwos(); unsubDrafts(); };
+        return () => { unsubProjects(); unsubMaster(); unsubSupervisors(); unsubEqm(); unsubTeams(); unsubSwos(); unsubDrafts(); };
     }, []);
 
-    const activeProjects = realProjects.filter(p => {
+    const combinedProjectsMap = new Map();
+    masterProjects.forEach(p => {
+        combinedProjectsMap.set(p.id, { ...p, status: 'ACTIVE' });
+    });
+    realProjects.forEach(p => {
+        if (p.isMasterOverride) {
+            if (combinedProjectsMap.has(p.id)) {
+                combinedProjectsMap.set(p.id, { ...combinedProjectsMap.get(p.id), status: p.status, isMaster: true });
+            }
+        } else {
+            combinedProjectsMap.set(p.id, p);
+        }
+    });
+    const combinedProjects = Array.from(combinedProjectsMap.values());
+
+    const activeProjects = combinedProjects.filter(p => {
         if (!user) return false;
+        if (p.status !== 'ACTIVE') return false;
         if (canAccessAllProjects(user.role)) return true;
         return user.assigned_projects?.includes(p.id);
     });
@@ -161,14 +191,14 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
         const opts: { id: string; label: string }[] = [];
         visibleDrafts.forEach(d => {
             if (d.project_id && !projIds.has(d.project_id)) {
-                const proj = realProjects.find(p => p.id === d.project_id);
+                const proj = combinedProjects.find(p => p.id === d.project_id);
                 const label = proj ? `${proj.no || ''} ${proj.name || ''}`.trim() || 'Unknown Project' : 'Unknown Project';
                 projIds.add(d.project_id);
                 opts.push({ id: d.project_id, label });
             }
         });
         return opts.sort((a, b) => a.label.localeCompare(b.label));
-    }, [visibleDrafts, realProjects]);
+    }, [visibleDrafts, combinedProjects]);
 
     const supervisorFilterOptions = React.useMemo(() => {
         const supIds = new Set<string>();
@@ -605,7 +635,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                         <div className="flex flex-wrap gap-3">
                             {filteredDrafts.map(draft => {
                                 const supName = realSupervisors.find(s => s.id === draft.supervisor_id)?.name || draft.supervisor_name || 'ยังไม่ได้เลือก';
-                                const projNo = realProjects.find(p => p.id === draft.project_id)?.no || '';
+                                const projNo = combinedProjects.find(p => p.id === draft.project_id)?.no || '';
                                 const isActive = editingDraftId === draft.id;
                                 const isReady = draft.status === 'Ready';
                                 const isNearStart = (() => {
@@ -682,7 +712,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                                 <tbody>
                                     {filteredDrafts.map(draft => {
                                         const supName = realSupervisors.find(s => s.id === draft.supervisor_id)?.name || draft.supervisor_name || 'ยังไม่ได้เลือก';
-                                        const proj = realProjects.find(p => p.id === draft.project_id);
+                                        const proj = combinedProjects.find(p => p.id === draft.project_id);
                                         const projLabel = proj ? `${proj.no || ''} ${proj.name || ''}`.trim() || '-' : '-';
                                         const isActive = editingDraftId === draft.id;
                                         const isReady = draft.status === 'Ready';

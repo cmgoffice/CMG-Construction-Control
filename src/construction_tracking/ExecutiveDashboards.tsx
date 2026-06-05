@@ -2,8 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useAuth } from './AuthRBACRouter';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { TrendingUp, Users, Clock, ShieldCheck, Activity, ClipboardCheck, Building2, CalendarCheck, CheckCircle2 } from 'lucide-react';
-import { col } from './firebase';
-import { onSnapshot, query } from 'firebase/firestore';
+import { col, masterDb } from './firebase';
+import { onSnapshot, query, collection } from 'firebase/firestore';
 import { canAccessAllProjects, isExecutiveRole } from './roleUtils';
 
 const COLORS = ['#22c55e', '#eab308', '#ef4444'];
@@ -99,7 +99,8 @@ export default function ExecutiveDashboards() {
     const [selectedProject, setSelectedProject] = useState('All');
     const [selectedSupervisor, setSelectedSupervisor] = useState('All');
 
-    const [projects, setProjects] = useState<any[]>([]);
+    const [realProjects, setRealProjects] = useState<any[]>([]);
+    const [masterProjects, setMasterProjects] = useState<any[]>([]);
     const [supervisors, setSupervisors] = useState<any[]>([]);
     const [swos, setSwos] = useState<any[]>([]);
     const [dailyReports, setDailyReports] = useState<any[]>([]);
@@ -107,8 +108,15 @@ export default function ExecutiveDashboards() {
 
     React.useEffect(() => {
         const unsubProjects = onSnapshot(query(col("projects")), (snapshot) => {
-            setProjects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setRealProjects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
+        const masterQ = query(collection(masterDb, "artifacts", "cmg-budget-control-default", "public", "data", "projects"));
+        const unsubMaster = onSnapshot(masterQ, (snapshot) => {
+            setMasterProjects(snapshot.docs.map(doc => {
+                const data = doc.data();
+                return { id: doc.id, ...data, no: data.jobNo || data.no || '-', isMaster: true };
+            }));
+        }, (err) => console.error(err));
         const unsubSuperv = onSnapshot(query(col("project_supervisors")), (snapshot) => {
             setSupervisors(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
@@ -121,8 +129,19 @@ export default function ExecutiveDashboards() {
         const unsubUsers = onSnapshot(query(col("users")), (snapshot) => {
             setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
-        return () => { unsubProjects(); unsubSuperv(); unsubSwos(); unsubReports(); unsubUsers(); };
+        return () => { unsubProjects(); unsubMaster(); unsubSuperv(); unsubSwos(); unsubReports(); unsubUsers(); };
     }, []);
+
+    const combinedProjectsMap = new Map();
+    masterProjects.forEach(p => combinedProjectsMap.set(p.id, { ...p, status: 'ACTIVE' }));
+    realProjects.forEach(p => {
+        if (p.isMasterOverride && combinedProjectsMap.has(p.id)) {
+            combinedProjectsMap.set(p.id, { ...combinedProjectsMap.get(p.id), status: p.status, isMaster: true });
+        } else {
+            combinedProjectsMap.set(p.id, p);
+        }
+    });
+    const projects = Array.from(combinedProjectsMap.values());
 
     const isExecutive = isExecutiveRole(user?.role);
 

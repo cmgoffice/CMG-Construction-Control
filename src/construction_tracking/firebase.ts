@@ -10,17 +10,30 @@ import {
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyAPtyxReFV0QrSoMcoIih2yMs11BbaLc1w",
-    authDomain: "constructioncontrol-37f21.firebaseapp.com",
-    projectId: "constructioncontrol-37f21",
-    storageBucket: "constructioncontrol-37f21.firebasestorage.app",
-    messagingSenderId: "311636692270",
-    appId: "1:311636692270:web:74374b162e19bf339d3ebf",
-    measurementId: "G-WLJKTML880"
+    apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "AIzaSyAPtyxReFV0QrSoMcoIih2yMs11BbaLc1w",
+    authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "constructioncontrol-37f21.firebaseapp.com",
+    projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "constructioncontrol-37f21",
+    storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "constructioncontrol-37f21.firebasestorage.app",
+    messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "311636692270",
+    appId: process.env.REACT_APP_FIREBASE_APP_ID || "1:311636692270:web:74374b162e19bf339d3ebf",
+    measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID || "G-WLJKTML880"
+};
+
+const masterFirebaseConfig = {
+    apiKey: process.env.REACT_APP_MASTER_FIREBASE_API_KEY || "AIzaSyDOqRqNW06Lu5fIQ_2Whr02tg6sn8zltw8",
+    authDomain: process.env.REACT_APP_MASTER_FIREBASE_AUTH_DOMAIN || "cmg-budget-control.firebaseapp.com",
+    projectId: process.env.REACT_APP_MASTER_FIREBASE_PROJECT_ID || "cmg-budget-control",
+    storageBucket: process.env.REACT_APP_MASTER_FIREBASE_STORAGE_BUCKET || "cmg-budget-control.firebasestorage.app",
+    messagingSenderId: process.env.REACT_APP_MASTER_FIREBASE_MESSAGING_SENDER_ID || "106345631455",
+    appId: process.env.REACT_APP_MASTER_FIREBASE_APP_ID || "1:106345631455:web:f96f15b024e8c65334e36a",
+    measurementId: process.env.REACT_APP_MASTER_FIREBASE_MEASUREMENT_ID || "G-YSPY0MTZG1"
 };
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+
+const masterApp = initializeApp(masterFirebaseConfig, "masterApp");
+export const masterDb = getFirestore(masterApp);
 export const auth = initializeAuth(app, {
     persistence: [
         indexedDBLocalPersistence,

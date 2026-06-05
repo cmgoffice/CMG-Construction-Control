@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthRBACRouter';
-import { col, docRef, logActivity } from './firebase';
-import { addDoc, onSnapshot, query, updateDoc, deleteDoc } from 'firebase/firestore';
+import { col, docRef, logActivity, masterDb } from './firebase';
+import { addDoc, onSnapshot, query, updateDoc, deleteDoc, collection, setDoc } from 'firebase/firestore';
 import { Plus, Search, Building2, Users, Wrench, HardHat, ShieldCheck, X, Download, Upload, FileSpreadsheet } from 'lucide-react';
 import { AlertModal, useAlert } from './AlertModal';
 import { canAccessAllProjects, canManageProjectResources, canManageProjects } from './roleUtils';
@@ -50,6 +50,7 @@ export default function ProjectDashboard() {
     const [isSaving, setIsSaving] = useState(false);
     const { showAlert, showConfirm, showDelete, modalProps } = useAlert();
     const [realProjects, setRealProjects] = useState<any[]>([]);
+    const [masterProjects, setMasterProjects] = useState<any[]>([]);
     const [realSupervisors, setRealSupervisors] = useState<any[]>([]);
     const [realEquipments, setRealEquipments] = useState<any[]>([]);
     const [realWorkerTeams, setRealWorkerTeams] = useState<any[]>([]);
@@ -89,6 +90,19 @@ export default function ProjectDashboard() {
             setRealProjects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (err) => console.error(err));
 
+        const masterQ = query(collection(masterDb, "artifacts", "cmg-budget-control-default", "public", "data", "projects"));
+        const unsubMaster = onSnapshot(masterQ, (snapshot) => {
+            setMasterProjects(snapshot.docs.map(doc => {
+                const data = doc.data();
+                return { 
+                    id: doc.id, 
+                    ...data, 
+                    no: data.jobNo || data.no || '-', 
+                    isMaster: true 
+                };
+            }));
+        }, (err) => console.error(err));
+
         const q2 = query(col("project_supervisors"));
         const unsub2 = onSnapshot(q2, (snapshot) => {
             setRealSupervisors(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -109,7 +123,7 @@ export default function ProjectDashboard() {
             setUsersList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (err) => console.error(err));
 
-        return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); };
+        return () => { unsub1(); unsubMaster(); unsub2(); unsub3(); unsub4(); unsub5(); };
     }, []);
 
     // Dynamic Year calculation for default Project No
@@ -117,10 +131,10 @@ export default function ProjectDashboard() {
     const defaultProjectNo = `PRJ-${currentYear}-J-xx`;
 
     // Form State
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<any>({
         no: defaultProjectNo, name: '', location: '', pm_id: '', cm_id: '',
         start_date: '', finish_date: '', main_contractor: '',
-        sub_contractor: '', client_name: '', project_note: ''
+        sub_contractor: '', client_name: '', project_note: '', status: 'ACTIVE', isMaster: false
     });
 
     const closeModal = () => {
@@ -130,7 +144,7 @@ export default function ProjectDashboard() {
         setFormData({
             no: defaultProjectNo, name: '', location: '', pm_id: '', cm_id: '',
             start_date: '', finish_date: '', main_contractor: '',
-            sub_contractor: '', client_name: '', project_note: ''
+            sub_contractor: '', client_name: '', project_note: '', status: 'ACTIVE', isMaster: false
         });
     };
 
@@ -138,9 +152,16 @@ export default function ProjectDashboard() {
         setIsSaving(true);
         try {
             if (editingProjectId) {
-                await updateDoc(docRef("projects", editingProjectId), {
-                    ...formData,
-                });
+                if (formData.isMaster) {
+                    await setDoc(docRef("projects", editingProjectId), {
+                        status: formData.status,
+                        isMasterOverride: true
+                    }, { merge: true });
+                } else {
+                    await updateDoc(docRef("projects", editingProjectId), {
+                        ...formData,
+                    });
+                }
                 // Log project update
                 await logActivity({
                     uid: user?.uid || '',
@@ -348,7 +369,20 @@ export default function ProjectDashboard() {
 
     // RBAC Filtering Logic
     // Live Firebase Projects
-    const combinedProjects = [...realProjects];
+    const combinedProjectsMap = new Map();
+    masterProjects.forEach(p => {
+        combinedProjectsMap.set(p.id, { ...p, status: 'ACTIVE' });
+    });
+    realProjects.forEach(p => {
+        if (p.isMasterOverride) {
+            if (combinedProjectsMap.has(p.id)) {
+                combinedProjectsMap.set(p.id, { ...combinedProjectsMap.get(p.id), status: p.status, isMaster: true });
+            }
+        } else {
+            combinedProjectsMap.set(p.id, p);
+        }
+    });
+    const combinedProjects = Array.from(combinedProjectsMap.values());
     const visibleProjects = combinedProjects.filter(p => {
         if (canAccessAllProjects(user?.role)) return true;
         return user?.assigned_projects?.includes(p.id);
@@ -562,8 +596,13 @@ export default function ProjectDashboard() {
                                         <td className="px-6 py-4">{p.name}</td>
                                         <td className="px-6 py-4">{p.location}</td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${p.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                                                }`}>
+                                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                                                p.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 
+                                                p.status === 'HOLD' ? 'bg-orange-100 text-orange-700' :
+                                                p.status === 'COMPLETE' ? 'bg-blue-100 text-blue-700' :
+                                                p.status === 'BIDDING' ? 'bg-purple-100 text-purple-700' :
+                                                'bg-gray-100 text-gray-700'
+                                            }`}>
                                                 {p.status}
                                             </span>
                                         </td>
@@ -573,8 +612,12 @@ export default function ProjectDashboard() {
                                                 <>
                                                     <span className="text-gray-300">|</span>
                                                     <button onClick={() => handleEdit(p)} className="text-orange-600 hover:text-orange-800 font-medium">Edit</button>
-                                                    <span className="text-gray-300">|</span>
-                                                    <button onClick={() => handleDelete(p)} className="text-red-600 hover:text-red-800 font-medium">Delete</button>
+                                                    {!p.isMaster && (
+                                                        <>
+                                                            <span className="text-gray-300">|</span>
+                                                            <button onClick={() => handleDelete(p)} className="text-red-600 hover:text-red-800 font-medium">Delete</button>
+                                                        </>
+                                                    )}
                                                 </>
                                             )}
                                         </td>
@@ -928,7 +971,7 @@ export default function ProjectDashboard() {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Project No.</label>
                                     <input
                                         type="text"
-                                        disabled={viewMode}
+                                        disabled={viewMode || formData.isMaster}
                                         value={formData.no}
                                         onChange={(e) => setFormData({ ...formData, no: e.target.value })}
                                         className="w-full p-2 border border-gray-300 rounded-md bg-yellow-50 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"
@@ -938,7 +981,7 @@ export default function ProjectDashboard() {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
                                     <input
                                         type="text"
-                                        disabled={viewMode}
+                                        disabled={viewMode || formData.isMaster}
                                         value={formData.name}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                         className="w-full p-2 border border-gray-300 rounded-md bg-yellow-50 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"
@@ -949,7 +992,7 @@ export default function ProjectDashboard() {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
                                     <input
                                         type="text"
-                                        disabled={viewMode}
+                                        disabled={viewMode || formData.isMaster}
                                         value={formData.location}
                                         onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                                         className="w-1/2 p-2 border border-gray-300 rounded-md bg-yellow-50 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"
@@ -960,7 +1003,7 @@ export default function ProjectDashboard() {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Project Manager (PM)</label>
                                     <input
                                         type="text"
-                                        disabled={viewMode}
+                                        disabled={viewMode || formData.isMaster}
                                         value={formData.pm_id}
                                         onChange={(e) => setFormData({ ...formData, pm_id: e.target.value })}
                                         className="w-full p-2 border border-gray-300 rounded-md bg-yellow-50 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"
@@ -970,7 +1013,7 @@ export default function ProjectDashboard() {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Construction Manager (CM)</label>
                                     <input
                                         type="text"
-                                        disabled={viewMode}
+                                        disabled={viewMode || formData.isMaster}
                                         value={formData.cm_id}
                                         onChange={(e) => setFormData({ ...formData, cm_id: e.target.value })}
                                         className="w-full p-2 border border-gray-300 rounded-md bg-yellow-50 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"
@@ -981,7 +1024,7 @@ export default function ProjectDashboard() {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Project Start</label>
                                     <input
                                         type="date"
-                                        disabled={viewMode}
+                                        disabled={viewMode || formData.isMaster}
                                         value={formData.start_date}
                                         onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
                                         className="w-full p-2 border border-gray-300 rounded-md bg-yellow-50 focus:ring-blue-500 focus:border-blue-500 outline-none text-gray-700 disabled:bg-gray-100 disabled:text-gray-500"
@@ -991,7 +1034,7 @@ export default function ProjectDashboard() {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Project Finish</label>
                                     <input
                                         type="date"
-                                        disabled={viewMode}
+                                        disabled={viewMode || formData.isMaster}
                                         value={formData.finish_date}
                                         onChange={(e) => setFormData({ ...formData, finish_date: e.target.value })}
                                         className="w-full p-2 border border-gray-300 rounded-md bg-yellow-50 focus:ring-blue-500 focus:border-blue-500 outline-none text-gray-700 disabled:bg-gray-100 disabled:text-gray-500"
@@ -1002,7 +1045,7 @@ export default function ProjectDashboard() {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Main Contractor</label>
                                     <input
                                         type="text"
-                                        disabled={viewMode}
+                                        disabled={viewMode || formData.isMaster}
                                         value={formData.main_contractor}
                                         onChange={(e) => setFormData({ ...formData, main_contractor: e.target.value })}
                                         className="w-full p-2 border border-gray-300 rounded-md bg-yellow-50 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"
@@ -1012,7 +1055,7 @@ export default function ProjectDashboard() {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Sub-Contractor</label>
                                     <input
                                         type="text"
-                                        disabled={viewMode}
+                                        disabled={viewMode || formData.isMaster}
                                         value={formData.sub_contractor}
                                         onChange={(e) => setFormData({ ...formData, sub_contractor: e.target.value })}
                                         className="w-full p-2 border border-gray-300 rounded-md bg-yellow-50 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"
@@ -1023,18 +1066,32 @@ export default function ProjectDashboard() {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Client name</label>
                                     <input
                                         type="text"
-                                        disabled={viewMode}
+                                        disabled={viewMode || formData.isMaster}
                                         value={formData.client_name}
                                         onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
                                         className="w-1/2 p-2 border border-gray-300 rounded-md bg-yellow-50 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"
                                     />
                                 </div>
 
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                                    <select
+                                        disabled={viewMode}
+                                        value={formData.status || 'ACTIVE'}
+                                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                                        className="w-full p-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                                    >
+                                        <option value="ACTIVE">Active</option>
+                                        <option value="HOLD">Hold</option>
+                                        <option value="COMPLETE">Complete</option>
+                                        <option value="BIDDING">Bidding</option>
+                                    </select>
+                                </div>
                                 <div className="md:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Project Note</label>
                                     <textarea
                                         rows={4}
-                                        disabled={viewMode}
+                                        disabled={viewMode || formData.isMaster}
                                         value={formData.project_note}
                                         onChange={(e) => setFormData({ ...formData, project_note: e.target.value })}
                                         className="w-full p-2 border border-gray-300 rounded-md bg-yellow-50 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"

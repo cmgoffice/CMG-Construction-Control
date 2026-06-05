@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from './AuthRBACRouter';
 import { FileCheck, CheckCircle2, X, Eye, Check, AlertCircle, XCircle, Clock, ChevronRight, ShieldAlert, Trash2, RefreshCw } from 'lucide-react';
-import { col, docRef, logActivity } from './firebase';
-import { onSnapshot, query, updateDoc, where, deleteDoc } from 'firebase/firestore';
+import { col, docRef, logActivity, masterDb } from './firebase';
+import { onSnapshot, query, updateDoc, where, deleteDoc, collection } from 'firebase/firestore';
 import { AlertModal, useAlert } from './AlertModal';
 import { canAccessAllProjects, hasUniversalRoleAccess, isSystemAdmin } from './roleUtils';
 
@@ -657,7 +657,8 @@ export const SWOCloseWorkflow = () => {
     const isSupervisorLike = user?.role === 'Supervisor' || hasUniversalAccess;
     const [swos, setSwos] = useState<any[]>([]);
     const [supervisorDocId, setSupervisorDocId] = useState<string | null>(null);
-    const [projects, setProjects] = useState<any[]>([]);
+    const [realProjects, setRealProjects] = useState<any[]>([]);
+    const [masterProjects, setMasterProjects] = useState<any[]>([]);
     const [selectedSwoForModal, setSelectedSwoForModal] = useState<any | null>(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
@@ -683,12 +684,30 @@ export const SWOCloseWorkflow = () => {
         return unsub;
     }, [hasUniversalAccess, isSupervisorLike, user]);
 
+    const combinedProjectsMap = new Map();
+    masterProjects.forEach(p => combinedProjectsMap.set(p.id, { ...p, status: 'ACTIVE' }));
+    realProjects.forEach(p => {
+        if (p.isMasterOverride && combinedProjectsMap.has(p.id)) {
+            combinedProjectsMap.set(p.id, { ...combinedProjectsMap.get(p.id), status: p.status, isMaster: true });
+        } else {
+            combinedProjectsMap.set(p.id, p);
+        }
+    });
+    const projects = Array.from(combinedProjectsMap.values());
+
     // Fetch projects for projectNo lookup
     useEffect(() => {
         const unsub = onSnapshot(query(col("projects")), snap => {
-            setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            setRealProjects(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
-        return unsub;
+        const masterQ = query(collection(masterDb, "artifacts", "cmg-budget-control-default", "public", "data", "projects"));
+        const unsubMaster = onSnapshot(masterQ, snap => {
+            setMasterProjects(snap.docs.map(doc => {
+                const data = doc.data();
+                return { id: doc.id, ...data, no: data.jobNo || data.no || '-', isMaster: true };
+            }));
+        }, err => console.error(err));
+        return () => { unsub(); unsubMaster(); };
     }, []);
 
     useEffect(() => {

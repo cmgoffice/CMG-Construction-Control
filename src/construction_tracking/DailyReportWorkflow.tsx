@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { CheckCircle, XCircle, Clock, Save, Send, AlertTriangle, MessageSquare, FileText, Edit3, Trash2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthRBACRouter';
-import { col, docRef, storage, logActivity } from './firebase';
-import { addDoc, onSnapshot, query, where, updateDoc, deleteDoc } from 'firebase/firestore';
+import { col, docRef, storage, logActivity, masterDb } from './firebase';
+import { addDoc, onSnapshot, query, where, updateDoc, deleteDoc, collection } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import SWOCreationForm from './SWOCreationForm';
 import { AlertModal, useAlert } from './AlertModal';
@@ -56,7 +56,8 @@ export const DailyReportManager = () => {
     const [supervisors, setSupervisors] = useState<any[]>([]);
     const [equipmentsList, setEquipmentsList] = useState<any[]>([]);
     const [allTeamsList, setAllTeamsList] = useState<any[]>([]);
-    const [projects, setProjects] = useState<any[]>([]);
+    const [realProjects, setRealProjects] = useState<any[]>([]);
+    const [masterProjects, setMasterProjects] = useState<any[]>([]);
     const [dailyReports, setDailyReports] = useState<any[]>([]);
     const [users, setUsers] = useState<any[]>([]);
 
@@ -74,7 +75,15 @@ export const DailyReportManager = () => {
         const unsub4 = onSnapshot(q4, (snapshot) => setAllTeamsList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
 
         const q5 = query(col("projects"));
-        const unsub5 = onSnapshot(q5, (snapshot) => setProjects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+        const unsub5 = onSnapshot(q5, (snapshot) => setRealProjects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+
+        const masterQ = query(collection(masterDb, "artifacts", "cmg-budget-control-default", "public", "data", "projects"));
+        const unsubMaster = onSnapshot(masterQ, (snapshot) => {
+            setMasterProjects(snapshot.docs.map(doc => {
+                const data = doc.data();
+                return { id: doc.id, ...data, no: data.jobNo || data.no || '-', isMaster: true };
+            }));
+        }, (err) => console.error(err));
 
         const q6 = query(col("daily_reports"));
         const unsub6 = onSnapshot(q6, (snapshot) => setDailyReports(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
@@ -82,8 +91,19 @@ export const DailyReportManager = () => {
         const q7 = query(col("users"));
         const unsub7 = onSnapshot(q7, (snapshot) => setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
 
-        return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); };
+        return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsubMaster(); unsub6(); unsub7(); };
     }, []);
+
+    const combinedProjectsMap = new Map();
+    masterProjects.forEach(p => combinedProjectsMap.set(p.id, { ...p, status: 'ACTIVE' }));
+    realProjects.forEach(p => {
+        if (p.isMasterOverride && combinedProjectsMap.has(p.id)) {
+            combinedProjectsMap.set(p.id, { ...combinedProjectsMap.get(p.id), status: p.status, isMaster: true });
+        } else {
+            combinedProjectsMap.set(p.id, p);
+        }
+    });
+    const projects = Array.from(combinedProjectsMap.values());
 
     // Auto-select SWO from notification navigation state
     const navTargetId = (location.state as any)?.targetId;
@@ -916,12 +936,33 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
     };
 
     // --- Projects query (to resolve project_no for report data) ---
-    const [projects, setProjects] = useState<any[]>([]);
+    const [realProjects, setRealProjects] = useState<any[]>([]);
+    const [masterProjects, setMasterProjects] = useState<any[]>([]);
     React.useEffect(() => {
         const q = query(col("projects"));
-        const unsub = onSnapshot(q, (snapshot) => setProjects(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))));
-        return unsub;
+        const unsub = onSnapshot(q, (snapshot) => setRealProjects(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))));
+
+        const masterQ = query(collection(masterDb, "artifacts", "cmg-budget-control-default", "public", "data", "projects"));
+        const unsubMaster = onSnapshot(masterQ, (snapshot) => {
+            setMasterProjects(snapshot.docs.map(doc => {
+                const data = doc.data();
+                return { id: doc.id, ...data, no: data.jobNo || data.no || '-', isMaster: true };
+            }));
+        }, (err) => console.error(err));
+
+        return () => { unsub(); unsubMaster(); };
     }, []);
+
+    const combinedProjectsMap = new Map();
+    masterProjects.forEach(p => combinedProjectsMap.set(p.id, { ...p, status: 'ACTIVE' }));
+    realProjects.forEach(p => {
+        if (p.isMasterOverride && combinedProjectsMap.has(p.id)) {
+            combinedProjectsMap.set(p.id, { ...combinedProjectsMap.get(p.id), status: p.status, isMaster: true });
+        } else {
+            combinedProjectsMap.set(p.id, p);
+        }
+    });
+    const projects = Array.from(combinedProjectsMap.values());
     const getProjectNo = (projectId: string) => {
         const proj = projects.find(p => p.id === projectId);
         return proj?.no || projectId || 'Unknown';
