@@ -83,7 +83,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
             combinedProjectsMap.set(p.id, p);
         }
     });
-    const combinedProjects = Array.from(combinedProjectsMap.values());
+    const combinedProjects = Array.from(combinedProjectsMap.values()).filter((p: any) => p.status !== 'COMPLETE');
 
     const activeProjects = combinedProjects.filter(p => {
         if (!user) return false;

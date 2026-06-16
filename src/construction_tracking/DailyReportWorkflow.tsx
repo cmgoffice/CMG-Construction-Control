@@ -104,6 +104,7 @@ export const DailyReportManager = () => {
         }
     });
     const projects = Array.from(combinedProjectsMap.values());
+    const activeProjectIds = new Set(projects.filter((p: any) => p.status !== 'COMPLETE').map((p: any) => p.id));
 
     // Auto-select SWO from notification navigation state
     const navTargetId = (location.state as any)?.targetId;
@@ -191,6 +192,7 @@ export const DailyReportManager = () => {
     });
 
     const filteredByUser = swoList.filter(swo => {
+        if (!activeProjectIds.has(swo.project_id_raw)) return false;
         if (!user) return false;
         // Exclude SWOs with Draft status from the table
         if (swo.status === 'Draft') return false;
@@ -962,7 +964,7 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
             combinedProjectsMap.set(p.id, p);
         }
     });
-    const projects = Array.from(combinedProjectsMap.values());
+    const projects = Array.from(combinedProjectsMap.values()).filter((p: any) => p.status !== 'COMPLETE');
     const getProjectNo = (projectId: string) => {
         const proj = projects.find(p => p.id === projectId);
         return proj?.no || projectId || 'Unknown';
@@ -1848,17 +1850,46 @@ export const ApprovalDashboard = () => {
     const [changeEditModal, setChangeEditModal] = useState<{ open: boolean; req: any | null }>({ open: false, req: null });
     const [changeEditDraft, setChangeEditDraft] = useState<{ activities: any[]; equipmentList: any[]; teamList: any[] } | null>(null);
 
+    const [realProjects, setRealProjects] = useState<any[]>([]);
+    const [masterProjects, setMasterProjects] = useState<any[]>([]);
+
+    React.useEffect(() => {
+        const unsub = onSnapshot(query(col("projects")), snap => {
+            setRealProjects(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+        const masterQ = query(collection(masterDb, "artifacts", "cmg-budget-control-default", "public", "data", "projects"));
+        const unsubMaster = onSnapshot(masterQ, snap => {
+            setMasterProjects(snap.docs.map(doc => {
+                const data = doc.data();
+                return { id: doc.id, ...data, isMaster: true };
+            }));
+        }, err => console.error(err));
+        return () => { unsub(); unsubMaster(); };
+    }, []);
+
+    const combinedProjectsMap = new Map();
+    masterProjects.forEach(p => combinedProjectsMap.set(p.id, { ...p, status: 'ACTIVE' }));
+    realProjects.forEach(p => {
+        if (p.isMasterOverride && combinedProjectsMap.has(p.id)) {
+            combinedProjectsMap.set(p.id, { ...combinedProjectsMap.get(p.id), status: p.status, isMaster: true });
+        } else {
+            combinedProjectsMap.set(p.id, p);
+        }
+    });
+    const projects = Array.from(combinedProjectsMap.values());
+    const activeProjectIds = new Set(projects.filter((p: any) => p.status !== 'COMPLETE').map((p: any) => p.id));
+
     React.useEffect(() => {
         const q = query(col("swo_change_requests"));
         const unsub = onSnapshot(q, (snapshot) => {
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             const filtered = (isAdminLike || user?.role === 'MD')
-                ? fetched
-                : fetched.filter((r: any) => (user as any)?.assigned_projects?.includes(r.project_id));
+                ? fetched.filter((r: any) => activeProjectIds.has(r.project_id))
+                : fetched.filter((r: any) => activeProjectIds.has(r.project_id) && (user as any)?.assigned_projects?.includes(r.project_id));
             setChangeRequests(filtered);
         });
         return unsub;
-    }, [isAdminLike, user?.role, user?.uid]);
+    }, [isAdminLike, user?.role, user?.uid, activeProjectIds]);
 
     const pendingChangeRequests = changeRequests.filter((r: any) => r.status === 'Pending CM' || r.status === 'Pending PM');
     const selectedChangeRequest = changeRequests.find(r => r.id === selectedChangeId);
@@ -1892,13 +1923,13 @@ export const ApprovalDashboard = () => {
 
             // RBAC: Admin/MD see all reports; all other roles see only reports from their assigned projects
             const filtered = (isAdminLike || user?.role === 'MD')
-                ? fetched
-                : fetched.filter(r => (user as any)?.assigned_projects?.includes((r as any).project_id));
+                ? fetched.filter((r: any) => activeProjectIds.has((r as any).project_id))
+                : fetched.filter((r: any) => activeProjectIds.has((r as any).project_id) && (user as any)?.assigned_projects?.includes((r as any).project_id));
 
             setReports(filtered);
         });
         return unsub;
-    }, [isAdminLike, user?.role, user?.uid]);
+    }, [isAdminLike, user?.role, user?.uid, activeProjectIds]);
 
     // Derive unique filter options from reports
     const uniqueSupervisors = Array.from(new Set(reports.map(r => r.supervisor || r.supervisor_name).filter(Boolean)));

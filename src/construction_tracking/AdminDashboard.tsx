@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 
-import { col, docRef, logActivity } from './firebase';
+import { col, docRef, logActivity, masterDb } from './firebase';
 
-import { onSnapshot, updateDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
+import { onSnapshot, updateDoc, deleteDoc, query, orderBy, limit, collection } from 'firebase/firestore';
 
 import { useAuthContext, AppUser, Role, Status } from './AuthContext';
 import { ALL_APP_ROLES, isSystemAdmin } from './roleUtils';
@@ -35,7 +35,23 @@ export const AdminDashboard = () => {
     const [logFilterAction, setLogFilterAction] = useState('All');
     const [logFilterDate, setLogFilterDate] = useState('');
 
-    const [projects, setProjects] = useState<any[]>([]);
+    const [realProjects, setRealProjects] = useState<any[]>([]);
+    const [masterProjects, setMasterProjects] = useState<any[]>([]);
+
+    const combinedProjectsMap = new Map();
+    masterProjects.forEach(p => {
+        combinedProjectsMap.set(p.id, { ...p, status: 'ACTIVE', isMaster: true });
+    });
+    realProjects.forEach(p => {
+        if (p.isMasterOverride) {
+            if (combinedProjectsMap.has(p.id)) {
+                combinedProjectsMap.set(p.id, { ...combinedProjectsMap.get(p.id), status: p.status, isMaster: true });
+            }
+        } else {
+            combinedProjectsMap.set(p.id, p);
+        }
+    });
+    const projects = Array.from(combinedProjectsMap.values()).filter((p: any) => p.status !== 'COMPLETE');
     const [userSearchQuery, setUserSearchQuery] = useState('');
 
 
@@ -76,9 +92,22 @@ export const AdminDashboard = () => {
 
             });
 
-            setProjects(projectsData);
+            setRealProjects(projectsData);
 
         });
+
+        const masterQ = query(collection(masterDb, "artifacts", "cmg-budget-control-default", "public", "data", "projects"));
+        const unsubMaster = onSnapshot(masterQ, (snapshot) => {
+            setMasterProjects(snapshot.docs.map(doc => {
+                const data = doc.data();
+                return { 
+                    id: doc.id, 
+                    ...data, 
+                    no: data.jobNo || data.no || '-', 
+                    isMaster: true 
+                };
+            }));
+        }, (err) => console.error(err));
 
 
 
@@ -87,6 +116,8 @@ export const AdminDashboard = () => {
             unsubscribeUsers();
 
             unsubscribeProjects();
+
+            unsubMaster();
 
         };
 

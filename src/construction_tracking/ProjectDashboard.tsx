@@ -386,7 +386,13 @@ export default function ProjectDashboard() {
     const visibleProjects = combinedProjects.filter(p => {
         if (canAccessAllProjects(user?.role)) return true;
         return user?.assigned_projects?.includes(p.id);
+    }).sort((a, b) => {
+        if (a.status === 'COMPLETE' && b.status !== 'COMPLETE') return 1;
+        if (a.status !== 'COMPLETE' && b.status === 'COMPLETE') return -1;
+        return (b.no || '').localeCompare(a.no || '');
     });
+
+    const activeVisibleProjects = visibleProjects.filter((p: any) => p.status !== 'COMPLETE');
 
     // Global Filter for A2, A3, A4
     const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>('All');
@@ -400,18 +406,18 @@ export default function ProjectDashboard() {
     // Filter based on selected project tab visually (Simplified for mock: taking first visible project info)
     const currentProject = visibleProjects[0];
 
-    // Merge logic
+    // Child data based on ACTIVE projects only
     const combinedSupervisors = [...realSupervisors];
-    const visibleSupervisors = combinedSupervisors.filter(s => visibleProjects.some(vp => vp.id === s.project_id));
+    const visibleSupervisors = combinedSupervisors.filter(s => activeVisibleProjects.some((vp: any) => vp.id === s.project_id));
     const filteredSupervisors = visibleSupervisors.filter(s => selectedProjectFilter === 'All' ? true : s.project_id === selectedProjectFilter);
 
     const combinedEquipments = [...realEquipments];
-    const visibleEquipments = combinedEquipments.filter(e => visibleProjects.some(vp => vp.id === e.project_id));
+    const visibleEquipments = combinedEquipments.filter(e => activeVisibleProjects.some((vp: any) => vp.id === e.project_id));
     const filteredEquipments = visibleEquipments.filter(e => selectedProjectFilter === 'All' ? true : e.project_id === selectedProjectFilter);
 
     const combinedWorkerTeams = [...realWorkerTeams];
-    const visibleWorkerTeams = combinedWorkerTeams.filter(t => visibleProjects.some(vp => vp.id === t.project_id));
-    const filteredWorkerTeams = visibleWorkerTeams.filter(t => selectedProjectFilter === 'All' ? true : t.project_id === selectedProjectFilter);
+    const visibleWorkerTeams = combinedWorkerTeams.filter(w => activeVisibleProjects.some((vp: any) => vp.id === w.project_id));
+    const filteredWorkerTeams = visibleWorkerTeams.filter(w => selectedProjectFilter === 'All' ? true : w.project_id === selectedProjectFilter);
 
     const downloadCSV = (filename: string, headers: string[], rows: string[][]) => {
         const escape = (val: string) => `"${String(val ?? '').replace(/"/g, '""')}"`;
@@ -502,8 +508,8 @@ export default function ProjectDashboard() {
                 value={selectedProjectFilter}
                 onChange={(e) => setSelectedProjectFilter(e.target.value)}
             >
-                <option value="All">All Projects</option>
-                {visibleProjects.map(p => (
+                <option value="All">All Active Projects</option>
+                {activeVisibleProjects.map(p => (
                     <option key={p.id} value={p.id}>{p.no}</option>
                 ))}
             </select>
@@ -593,7 +599,14 @@ export default function ProjectDashboard() {
                                 {visibleProjects.map(p => (
                                     <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-6 py-4 font-medium text-gray-900">{p.no}</td>
-                                        <td className="px-6 py-4">{p.name}</td>
+                                        <td className="px-6 py-4">
+                                            {p.name}
+                                            {p.isMaster && (
+                                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                                    MasterData
+                                                </span>
+                                            )}
+                                        </td>
                                         <td className="px-6 py-4">{p.location}</td>
                                         <td className="px-6 py-4">
                                             <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${

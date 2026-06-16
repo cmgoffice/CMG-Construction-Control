@@ -141,7 +141,7 @@ export default function ExecutiveDashboards() {
             combinedProjectsMap.set(p.id, p);
         }
     });
-    const projects = Array.from(combinedProjectsMap.values());
+    const projects = Array.from(combinedProjectsMap.values()).filter((p: any) => p.status !== 'COMPLETE');
 
     const isExecutive = isExecutiveRole(user?.role);
 

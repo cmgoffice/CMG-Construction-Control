@@ -694,6 +694,7 @@ export const SWOCloseWorkflow = () => {
         }
     });
     const projects = Array.from(combinedProjectsMap.values());
+    const activeProjectIds = new Set(projects.filter((p: any) => p.status !== 'COMPLETE').map((p: any) => p.id));
 
     // Fetch projects for projectNo lookup
     useEffect(() => {
@@ -715,6 +716,7 @@ export const SWOCloseWorkflow = () => {
             const fetched = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
 
             const visible = fetched.filter((swo: any) => {
+                if (!activeProjectIds.has(swo.project_id)) return false;
                 if (!user) return false;
                 // CM sees SWOs in CM Review (and beyond) for their assigned projects
                 if (user.role === 'CM') {
