@@ -4,10 +4,11 @@ import { col, docRef, logActivity, masterDb } from './firebase';
 import { onSnapshot, query, addDoc, updateDoc, getDocs, where, deleteDoc, collection } from 'firebase/firestore';
 import { useAuth } from './AuthRBACRouter';
 import { AlertModal, useAlert } from './AlertModal';
-import { canAccessAllProjects } from './roleUtils';
+import { canAccessAllProjects, isViewer } from './roleUtils';
 
 export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: any, onCancelEdit?: () => void }) {
     const { user } = useAuth();
+    const readOnly = isViewer(user?.role);
     const { showAlert, showConfirm, showDelete, modalProps } = useAlert();
     const [realProjects, setRealProjects] = useState<any[]>([]);
     const [masterProjects, setMasterProjects] = useState<any[]>([]);
@@ -567,15 +568,15 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
     };
 
     return (
-        <div className="max-w-5xl mx-auto space-y-6 pb-12">
+        <fieldset disabled={readOnly} className="max-w-6xl mx-auto space-y-3.5 pb-12 disabled:opacity-75 w-full min-w-0">
             <AlertModal {...modalProps} />
 
             {/* Draft Cards */}
             {!editSwo && filteredDrafts.length > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                        <h3 className="text-sm font-bold text-amber-800 flex items-center gap-2">
-                            <Save className="w-4 h-4" />
+                <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2.5 mb-2.5">
+                        <h3 className="text-xs sm:text-sm font-bold text-amber-800 flex items-center gap-1.5">
+                            <Save className="w-3.5 h-3.5" />
                             Saved Drafts ({filteredDrafts.length})
                         </h3>
                         <div className="flex items-center gap-2 text-xs">
@@ -651,7 +652,7 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                                 return (
                                     <div
                                         key={draft.id}
-                                        className={`relative flex items-start gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all shadow-sm min-w-[200px] max-w-[260px] ${
+                                        className={`relative flex items-start gap-2.5 px-3 py-2.5 rounded-lg border-2 cursor-pointer transition-all shadow-xs min-w-[190px] max-w-[240px] ${
                                             isNearStart
                                                 ? 'border-red-500 bg-red-50 animate-pulse'
                                                 : isReady
@@ -780,14 +781,14 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
             )}
 
             {editSwo && (
-                <div className="flex items-center gap-4 bg-white p-6 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden">
-                    <div className="absolute left-0 top-0 bottom-0 w-2 bg-orange-500"></div>
-                    <button onClick={onCancelEdit} type="button" className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors shrink-0">
+                <div className="flex items-center gap-3 bg-white p-3.5 sm:p-4 rounded-xl border border-gray-200/90 shadow-xs relative overflow-hidden">
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-orange-500"></div>
+                    <button onClick={onCancelEdit} type="button" className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors shrink-0">
                         <span className="sr-only">Back</span>
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
                     </button>
                     <div className="flex-1">
-                        <h1 className="text-2xl font-bold text-gray-900">
+                        <h1 className="text-lg sm:text-xl font-bold text-gray-900">
                             {editSwo.status === 'Request Change' ? 'Edit SWO (Change Requested)' : 'Edit / Reassign SWO'}
                         </h1>
                         {editSwo.change_reason && (
@@ -804,53 +805,53 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                 </div>
             )}
 
-            <div className={`flex justify-between items-center bg-white p-6 rounded-xl border border-gray-200 shadow-sm ${editSwo ? 'hidden' : ''}`}>
+            <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 sm:p-4 rounded-xl border border-gray-200/90 shadow-xs w-full min-w-0 ${editSwo ? 'hidden' : ''}`}>
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">
+                    <h1 className="text-lg sm:text-xl font-bold text-gray-900">
                         {editingDraftId ? 'Edit Draft SWO' : 'Create Site Work Order (SWO)'}
                     </h1>
-                    <p className="text-gray-500 mt-1">
+                    <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
                         {editingDraftId
                             ? <span className="text-amber-600 font-medium">กำลังแก้ไข Draft — กด Save Draft เพื่อบันทึก, Ready เพื่อเตรียมส่ง หรือ Assign SWO เพื่อส่งงานทันที</span>
                             : 'Fill in the details below or import data from Excel.'}
                     </p>
                 </div>
-                <div className="flex flex-wrap gap-3 w-full md:w-auto">
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                     <button
                         type="button"
                         onClick={handleSaveDraft}
-                        className="flex-1 md:flex-none justify-center px-4 py-2 border border-amber-400 text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 flex items-center font-medium shadow-sm transition-colors"
+                        className="flex-1 sm:flex-none justify-center px-3.5 py-1.5 text-xs sm:text-sm border border-amber-400 text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 flex items-center font-medium shadow-xs transition-colors"
                     >
-                        <Save className="w-4 h-4 mr-2" /> Save Draft
+                        <Save className="w-3.5 h-3.5 mr-1.5" /> Save Draft
                     </button>
                     <button
                         type="button"
                         onClick={handleMarkReady}
-                        className="flex-1 md:flex-none justify-center px-4 py-2 border border-emerald-500 text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 flex items-center font-medium shadow-sm transition-colors"
+                        className="flex-1 sm:flex-none justify-center px-3.5 py-1.5 text-xs sm:text-sm border border-emerald-500 text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 flex items-center font-medium shadow-xs transition-colors"
                     >
-                        <Send className="w-4 h-4 mr-2" /> Ready
+                        <Send className="w-3.5 h-3.5 mr-1.5" /> Ready
                     </button>
                     <button
                         type="button"
                         onClick={handleSubmit}
-                        className="flex-1 md:flex-none justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center font-medium shadow-sm transition-colors"
+                        className="flex-1 sm:flex-none justify-center px-3.5 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center font-medium shadow-xs transition-colors"
                     >
-                        <Send className="w-4 h-4 mr-2" /> Assign SWO
+                        <Send className="w-3.5 h-3.5 mr-1.5" /> Assign SWO
                     </button>
                 </div>
             </div>
 
-            <form id="swo-form" onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <form id="swo-form" onSubmit={handleSubmit} className="bg-white rounded-xl shadow-xs border border-gray-200/90 overflow-hidden w-full min-w-0">
                 {/* SWO Header */}
-                <div className="p-6 border-b border-gray-100 bg-gray-50/30">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                        <FileText className="w-5 h-5 mr-2 text-blue-500" /> General Details
+                <div className="p-3.5 sm:p-4 border-b border-gray-100 bg-gray-50/40">
+                    <h3 className="text-xs sm:text-sm font-semibold text-gray-800 mb-2.5 flex items-center">
+                        <FileText className="w-4 h-4 mr-1.5 text-blue-500" /> General Details
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 w-full min-w-0">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Project</label>
                             <select
-                                className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+                                className="w-full border-gray-300 rounded-lg shadow-xs focus:border-blue-500 focus:ring-blue-500 py-1.5 px-2.5 text-xs sm:text-sm border"
                                 value={formData.project_id}
                                 onChange={e => setFormData({ ...formData, project_id: e.target.value })}
                             >
@@ -863,50 +864,50 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">SWO No.</label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">SWO No.</label>
                             <input
                                 type="text"
-                                className="w-full border-gray-300 rounded-md shadow-sm bg-gray-50 p-2 border text-gray-600 cursor-not-allowed font-mono"
+                                className="w-full border-gray-300 rounded-lg shadow-xs bg-gray-50 py-1.5 px-2.5 text-xs sm:text-sm border text-gray-600 cursor-not-allowed font-mono"
                                 value={formData.swo_no}
                                 disabled
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">📅 Start Date</label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">📅 Start Date</label>
                             <input
                                 type="date"
-                                className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+                                className="w-full border-gray-300 rounded-lg shadow-xs focus:border-blue-500 focus:ring-blue-500 py-1.5 px-2.5 text-xs sm:text-sm border"
                                 value={formData.start_date}
                                 onChange={e => setFormData({ ...formData, start_date: e.target.value })}
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">📅 Finish Date</label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">📅 Finish Date</label>
                             <input
                                 type="date"
-                                className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+                                className="w-full border-gray-300 rounded-lg shadow-xs focus:border-blue-500 focus:ring-blue-500 py-1.5 px-2.5 text-xs sm:text-sm border"
                                 value={formData.finish_date}
                                 onChange={e => setFormData({ ...formData, finish_date: e.target.value })}
                             />
                         </div>
                         <div className="lg:col-span-2">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Work Name / Scope Description</label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Work Name / Scope Description</label>
                             <input
                                 type="text"
                                 placeholder="e.g. Ground Floor Column Pouring"
-                                className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+                                className="w-full border-gray-300 rounded-lg shadow-xs focus:border-blue-500 focus:ring-blue-500 py-1.5 px-2.5 text-xs sm:text-sm border"
                                 value={formData.work_name}
                                 onChange={e => setFormData({ ...formData, work_name: e.target.value })}
                             />
                         </div>
                         <div className="lg:col-span-2">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Assign Supervisor</label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Assign Supervisor</label>
                             <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <HardHat className="h-5 w-5 text-gray-400" />
+                                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                    <HardHat className="h-4 w-4 text-gray-400" />
                                 </div>
                                 <select
-                                    className="w-full pl-10 border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border appearance-none"
+                                    className="w-full pl-8 border-gray-300 rounded-lg shadow-xs focus:border-blue-500 focus:ring-blue-500 py-1.5 px-2.5 text-xs sm:text-sm border appearance-none"
                                     value={formData.supervisor_id}
                                     onChange={e => setFormData({ ...formData, supervisor_id: e.target.value })}
                                 >
@@ -923,32 +924,32 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                 </div>
 
                 {/* Dynamic Tables */}
-                <div className="p-4 space-y-6">
+                <div className="p-3.5 sm:p-4 space-y-3.5">
 
                     {/* Activities (B1) */}
                     <section>
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
-                            <h3 className="text-sm font-semibold text-gray-800 flex items-center shrink-0">
-                                <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-green-100 text-green-700 font-bold text-xs mr-2">B1</span>
+                            <h3 className="text-xs sm:text-sm font-semibold text-gray-800 flex items-center shrink-0">
+                                <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-green-100 text-green-700 font-bold text-[11px] mr-1.5">B1</span>
                                 Work Activities
                             </h3>
-                            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                                <button onClick={handleDownloadTemplate} type="button" className="text-sm text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded-md flex items-center font-medium transition-colors shadow-sm">
-                                    <Download className="w-4 h-4 mr-1.5 shrink-0" /> <span className="hidden sm:inline">Template</span>
+                            <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+                                <button onClick={handleDownloadTemplate} type="button" className="text-xs text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 px-2.5 py-1 rounded-md flex items-center font-medium transition-colors shadow-xs">
+                                    <Download className="w-3.5 h-3.5 mr-1 shrink-0" /> <span className="hidden sm:inline">Template</span>
                                 </button>
-                                <button onClick={handleImportTemplate} type="button" className="text-sm text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-3 py-1.5 rounded-md flex items-center font-medium transition-colors">
-                                    <Upload className="w-4 h-4 mr-1.5 shrink-0" /> <span className="hidden sm:inline">Import</span>
+                                <button onClick={handleImportTemplate} type="button" className="text-xs text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-2.5 py-1 rounded-md flex items-center font-medium transition-colors">
+                                    <Upload className="w-3.5 h-3.5 mr-1 shrink-0" /> <span className="hidden sm:inline">Import</span>
                                 </button>
-                                <button onClick={handleExportExcel} type="button" className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-3 py-1.5 rounded-md flex items-center font-medium transition-colors">
-                                    <FileSpreadsheet className="w-4 h-4 mr-1.5 shrink-0" /> <span className="hidden sm:inline">Export</span>
+                                <button onClick={handleExportExcel} type="button" className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-2.5 py-1 rounded-md flex items-center font-medium transition-colors">
+                                    <FileSpreadsheet className="w-3.5 h-3.5 mr-1 shrink-0" /> <span className="hidden sm:inline">Export</span>
                                 </button>
-                                <div className="hidden lg:block w-px h-6 bg-gray-300 mx-1"></div>
-                                <button onClick={addActivity} type="button" className="text-sm text-green-700 bg-green-100 hover:bg-green-200 px-3 py-1.5 rounded-md flex items-center font-medium transition-colors shadow-sm shrink-0">
-                                    <Plus className="w-4 h-4 mr-1 shrink-0" /> Add Row
+                                <div className="hidden lg:block w-px h-5 bg-gray-300 mx-1"></div>
+                                <button onClick={addActivity} type="button" className="text-xs text-green-700 bg-green-100 hover:bg-green-200 px-2.5 py-1 rounded-md flex items-center font-medium transition-colors shadow-xs shrink-0">
+                                    <Plus className="w-3.5 h-3.5 mr-1 shrink-0" /> Add Row
                                 </button>
                             </div>
                         </div>
-                        <div className="border border-slate-200 rounded-lg overflow-hidden bg-white overflow-x-auto">
+                        <div className="border border-slate-200 rounded-lg overflow-hidden bg-white overflow-x-auto w-full min-w-0">
                             <table className="w-full text-left text-xs text-gray-700">
                                 <thead className="bg-slate-100 border-b border-slate-200 text-gray-700">
                                     <tr>
@@ -999,134 +1000,137 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                         </div>
                     </section>
 
-                    {/* Equipment (B2) */}
-                    <section>
-                        <div className="flex justify-between items-center mb-2">
-                            <h3 className="text-sm font-semibold text-gray-800 flex items-center">
-                                <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-orange-100 text-orange-700 mr-2">
-                                    <Wrench className="w-3.5 h-3.5" />
-                                </span>
-                                Equipment (B2)
-                            </h3>
-                            <button onClick={addEquipment} type="button" className="text-xs text-orange-600 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded flex items-center font-medium transition-colors">
-                                <Plus className="w-3.5 h-3.5 mr-1" /> Add Equipment
-                            </button>
-                        </div>
-                        <div className="border border-slate-200 rounded-lg overflow-hidden bg-white overflow-x-auto">
-                            <table className="w-full text-left text-xs text-gray-700">
-                                <thead className="bg-slate-100 border-b border-slate-200 text-gray-700">
-                                    <tr>
-                                        <th className="px-3 py-2 font-semibold border-r border-slate-200 w-10 text-center">#</th>
-                                        <th className="px-3 py-2 font-semibold border-r border-slate-200 min-w-[250px]">Select Equipment (from A3)</th>
-                                        <th className="px-3 py-2 w-10 text-center"></th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {equipmentList.map((row, idx) => (
-                                        <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                            <td className="px-3 py-1 border-r border-slate-100 text-center text-gray-500 font-medium">{idx + 1}</td>
-                                            <td className="px-3 py-1 border-r border-slate-100">
-                                                <select
-                                                    className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none min-w-[200px]"
-                                                    value={row.equipment_id}
-                                                    onChange={(e) => {
-                                                        const newArr = [...equipmentList]; newArr[idx].equipment_id = e.target.value; setEquipmentList(newArr);
-                                                    }}
-                                                >
-                                                    <option value="">-- Choose Equipment --</option>
-                                                    {projectEquipments.length === 0 ? (
-                                                        <option value="" disabled>No equipment assigned to this project (A3)</option>
-                                                    ) : (
-                                                        projectEquipments.map(eq => <option key={eq.id} value={eq.equipment_id || eq.id}>{eq.eqm_name} ({eq.po_no})</option>)
-                                                    )}
-                                                </select>
-                                            </td>
-                                            <td className="px-2 py-1 text-center">
-                                                <button onClick={() => removeEquipment(row.id)} className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors">
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            </td>
+                    {/* Equipment (B2) & Worker Teams (B3) - Compact Split Layout */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 items-start w-full min-w-0">
+                        {/* Equipment (B2) */}
+                        <section className="bg-slate-50/50 p-3 rounded-xl border border-slate-200/80 min-w-0 w-full">
+                            <div className="flex justify-between items-center mb-2">
+                                <h3 className="text-xs sm:text-sm font-semibold text-gray-800 flex items-center">
+                                    <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-orange-100 text-orange-700 mr-1.5">
+                                        <Wrench className="w-3 h-3" />
+                                    </span>
+                                    Equipment (B2)
+                                </h3>
+                                <button onClick={addEquipment} type="button" className="text-xs text-orange-600 bg-white border border-orange-200 hover:bg-orange-50 px-2 py-1 rounded-md flex items-center font-medium transition-colors shadow-xs">
+                                    <Plus className="w-3 h-3 mr-1" /> Add Equipment
+                                </button>
+                            </div>
+                            <div className="border border-slate-200 rounded-lg overflow-hidden bg-white overflow-x-auto w-full min-w-0">
+                                <table className="w-full text-left text-xs text-gray-700">
+                                    <thead className="bg-slate-100/90 border-b border-slate-200 text-gray-700">
+                                        <tr>
+                                            <th className="px-2.5 py-1.5 font-semibold border-r border-slate-200 w-9 text-center">#</th>
+                                            <th className="px-2.5 py-1.5 font-semibold border-r border-slate-200">Select Equipment (from A3)</th>
+                                            <th className="px-2 py-1.5 w-8 text-center"></th>
                                         </tr>
-                                    ))}
-                                    {equipmentList.length === 0 && (
-                                        <tr><td colSpan={3} className="px-4 py-4 text-center text-gray-400 bg-gray-50 text-xs">No equipment assigned.</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {equipmentList.map((row, idx) => (
+                                            <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                                                <td className="px-2.5 py-1 border-r border-slate-100 text-center text-gray-500 font-medium text-xs">{idx + 1}</td>
+                                                <td className="px-2.5 py-1 border-r border-slate-100">
+                                                    <select
+                                                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                                                        value={row.equipment_id}
+                                                        onChange={(e) => {
+                                                            const newArr = [...equipmentList]; newArr[idx].equipment_id = e.target.value; setEquipmentList(newArr);
+                                                        }}
+                                                    >
+                                                        <option value="">-- Choose Equipment --</option>
+                                                        {projectEquipments.length === 0 ? (
+                                                            <option value="" disabled>No equipment assigned to this project (A3)</option>
+                                                        ) : (
+                                                            projectEquipments.map(eq => <option key={eq.id} value={eq.equipment_id || eq.id}>{eq.eqm_name} ({eq.po_no})</option>)
+                                                        )}
+                                                    </select>
+                                                </td>
+                                                <td className="px-1.5 py-1 text-center">
+                                                    <button onClick={() => removeEquipment(row.id)} className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors">
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {equipmentList.length === 0 && (
+                                            <tr><td colSpan={3} className="px-3 py-3 text-center text-gray-400 bg-gray-50 text-xs">No equipment assigned.</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
 
-                    {/* Worker Teams (B3) */}
-                    <section>
-                        <div className="flex justify-between items-center mb-2">
-                            <h3 className="text-sm font-semibold text-gray-800 flex items-center">
-                                <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-indigo-100 text-indigo-700 mr-2">
-                                    <Users className="w-3.5 h-3.5" />
-                                </span>
-                                Worker Teams (B3)
-                            </h3>
-                            <button onClick={addTeam} type="button" className="text-xs text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded flex items-center font-medium transition-colors">
-                                <Plus className="w-3.5 h-3.5 mr-1" /> Add Team
-                            </button>
-                        </div>
-                        <div className="border border-slate-200 rounded-lg overflow-hidden bg-white overflow-x-auto">
-                            <table className="w-full text-left text-xs text-gray-700">
-                                <thead className="bg-slate-100 border-b border-slate-200 text-gray-700">
-                                    <tr>
-                                        <th className="px-3 py-2 font-semibold border-r border-slate-200 w-10 text-center">#</th>
-                                        <th className="px-3 py-2 font-semibold border-r border-slate-200 min-w-[250px]">Select Worker Team (from A4)</th>
-                                        <th className="px-3 py-2 w-10 text-center"></th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {teamList.map((row, idx) => (
-                                        <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                            <td className="px-3 py-1 border-r border-slate-100 text-center text-gray-500 font-medium">{idx + 1}</td>
-                                            <td className="px-3 py-1 border-r border-slate-100">
-                                                <select
-                                                    className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none min-w-[200px]"
-                                                    value={row.team_id}
-                                                    onChange={(e) => {
-                                                        const newArr = [...teamList]; newArr[idx].team_id = e.target.value; setTeamList(newArr);
-                                                    }}
-                                                >
-                                                    <option value="">-- Choose Team --</option>
-                                                    {projectTeams.length === 0 ? (
-                                                        <option value="" disabled>No teams assigned to this project (A4)</option>
-                                                    ) : (
-                                                        projectTeams.map(tm => <option key={tm.id} value={tm.team_id || tm.id}>{tm.name} ({tm.team_code})</option>)
-                                                    )}
-                                                </select>
-                                            </td>
-                                            <td className="px-2 py-1 text-center">
-                                                <button onClick={() => removeTeam(row.id)} className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors">
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            </td>
+                        {/* Worker Teams (B3) */}
+                        <section className="bg-slate-50/50 p-3 rounded-xl border border-slate-200/80 min-w-0 w-full">
+                            <div className="flex justify-between items-center mb-2">
+                                <h3 className="text-xs sm:text-sm font-semibold text-gray-800 flex items-center">
+                                    <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-indigo-100 text-indigo-700 mr-1.5">
+                                        <Users className="w-3 h-3" />
+                                    </span>
+                                    Worker Teams (B3)
+                                </h3>
+                                <button onClick={addTeam} type="button" className="text-xs text-indigo-600 bg-white border border-indigo-200 hover:bg-indigo-50 px-2 py-1 rounded-md flex items-center font-medium transition-colors shadow-xs">
+                                    <Plus className="w-3 h-3 mr-1" /> Add Team
+                                </button>
+                            </div>
+                            <div className="border border-slate-200 rounded-lg overflow-hidden bg-white overflow-x-auto w-full min-w-0">
+                                <table className="w-full text-left text-xs text-gray-700">
+                                    <thead className="bg-slate-100/90 border-b border-slate-200 text-gray-700">
+                                        <tr>
+                                            <th className="px-2.5 py-1.5 font-semibold border-r border-slate-200 w-9 text-center">#</th>
+                                            <th className="px-2.5 py-1.5 font-semibold border-r border-slate-200">Select Worker Team (from A4)</th>
+                                            <th className="px-2 py-1.5 w-8 text-center"></th>
                                         </tr>
-                                    ))}
-                                    {teamList.length === 0 && (
-                                        <tr><td colSpan={3} className="px-4 py-4 text-center text-gray-400 bg-gray-50 text-xs">No teams assigned.</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {teamList.map((row, idx) => (
+                                            <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                                                <td className="px-2.5 py-1 border-r border-slate-100 text-center text-gray-500 font-medium text-xs">{idx + 1}</td>
+                                                <td className="px-2.5 py-1 border-r border-slate-100">
+                                                    <select
+                                                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                                                        value={row.team_id}
+                                                        onChange={(e) => {
+                                                            const newArr = [...teamList]; newArr[idx].team_id = e.target.value; setTeamList(newArr);
+                                                        }}
+                                                    >
+                                                        <option value="">-- Choose Team --</option>
+                                                        {projectTeams.length === 0 ? (
+                                                            <option value="" disabled>No teams assigned to this project (A4)</option>
+                                                        ) : (
+                                                            projectTeams.map(tm => <option key={tm.id} value={tm.team_id || tm.id}>{tm.name} ({tm.team_code})</option>)
+                                                        )}
+                                                    </select>
+                                                </td>
+                                                <td className="px-1.5 py-1 text-center">
+                                                    <button onClick={() => removeTeam(row.id)} className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors">
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {teamList.length === 0 && (
+                                            <tr><td colSpan={3} className="px-3 py-3 text-center text-gray-400 bg-gray-50 text-xs">No teams assigned.</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                    </div>
 
                     {/* Additional Notes (B4) */}
                     <section>
-                        <div className="flex justify-between items-center mb-2">
-                            <h3 className="text-sm font-semibold text-gray-800 flex items-center">
-                                <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-yellow-100 text-yellow-700 mr-2">
-                                    <FileText className="w-3.5 h-3.5" />
+                        <div className="flex justify-between items-center mb-1.5">
+                            <h3 className="text-xs sm:text-sm font-semibold text-gray-800 flex items-center">
+                                <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-yellow-100 text-yellow-700 mr-1.5">
+                                    <FileText className="w-3 h-3" />
                                 </span>
                                 Additional Notes (B4)
                             </h3>
                         </div>
                         <div className="bg-white">
                             <textarea
-                                rows={4}
-                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-y"
+                                rows={2}
+                                className="w-full p-2.5 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-y"
                                 placeholder="Enter any additional instructions for the Supervisor here..."
                                 value={formData.additional_notes}
                                 onChange={(e) => setFormData({ ...formData, additional_notes: e.target.value })}
@@ -1135,38 +1139,38 @@ export default function SWOCreationForm({ editSwo, onCancelEdit }: { editSwo?: a
                     </section>
                 </div>
 
-                <div className="flex justify-end pt-6 border-t border-gray-200 bg-gray-50 p-6 rounded-b-xl -mx-6 -mb-6 mt-6">
-                    <div className="flex gap-3 flex-wrap">
+                <div className="flex justify-end pt-3 border-t border-gray-200/90 bg-gray-50/80 p-3 sm:p-3.5 rounded-b-xl -mx-3.5 -mb-3.5 sm:-mx-4 sm:-mb-4 mt-3.5">
+                    <div className="flex gap-2 flex-wrap">
                         {editSwo ? (
                             <>
-                                <button type="button" onClick={() => { if (onCancelEdit) onCancelEdit(); }} className="px-5 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors">
+                                <button type="button" onClick={() => { if (onCancelEdit) onCancelEdit(); }} className="px-3.5 py-1.5 text-xs sm:text-sm border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors">
                                     Cancel
                                 </button>
-                                <button type="submit" form="swo-form" className="px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center shadow-sm">
-                                    <Send className="w-4 h-4 mr-2" /> {editSwo.status === 'Request Change' ? 'Update SWO' : 'Update & Assign'}
+                                <button type="submit" form="swo-form" className="px-3.5 py-1.5 text-xs sm:text-sm bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center shadow-xs">
+                                    <Send className="w-3.5 h-3.5 mr-1.5" /> {editSwo.status === 'Request Change' ? 'Update SWO' : 'Update & Assign'}
                                 </button>
                             </>
                         ) : (
                             <>
                                 {editingDraftId && (
-                                    <button type="button" onClick={clearDraftEditing} className="px-5 py-2.5 border border-gray-300 text-gray-500 font-medium rounded-lg hover:bg-gray-50 transition-colors text-sm">
+                                    <button type="button" onClick={clearDraftEditing} className="px-3 py-1.5 border border-gray-300 text-gray-500 font-medium rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm">
                                         ยกเลิกแก้ไข Draft
                                     </button>
                                 )}
-                                <button type="button" onClick={handleSaveDraft} className="px-5 py-2.5 border border-amber-400 text-amber-700 bg-amber-50 font-medium rounded-lg hover:bg-amber-100 transition-colors flex items-center shadow-sm">
-                                    <Save className="w-4 h-4 mr-2" /> Save Draft
+                                <button type="button" onClick={handleSaveDraft} className="px-3.5 py-1.5 text-xs sm:text-sm border border-amber-400 text-amber-700 bg-amber-50 font-medium rounded-lg hover:bg-amber-100 transition-colors flex items-center shadow-xs">
+                                    <Save className="w-3.5 h-3.5 mr-1.5" /> Save Draft
                                 </button>
-                                <button type="button" onClick={handleMarkReady} className="px-5 py-2.5 border border-emerald-500 text-emerald-700 bg-emerald-50 font-medium rounded-lg hover:bg-emerald-100 transition-colors flex items-center shadow-sm">
-                                    <Send className="w-4 h-4 mr-2" /> Ready
+                                <button type="button" onClick={handleMarkReady} className="px-3.5 py-1.5 text-xs sm:text-sm border border-emerald-500 text-emerald-700 bg-emerald-50 font-medium rounded-lg hover:bg-emerald-100 transition-colors flex items-center shadow-xs">
+                                    <Send className="w-3.5 h-3.5 mr-1.5" /> Ready
                                 </button>
-                                <button type="submit" form="swo-form" className="px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center shadow-sm">
-                                    <Send className="w-4 h-4 mr-2" /> Assign SWO
+                                <button type="submit" form="swo-form" className="px-3.5 py-1.5 text-xs sm:text-sm bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center shadow-xs">
+                                    <Send className="w-3.5 h-3.5 mr-1.5" /> Assign SWO
                                 </button>
                             </>
                         )}
                     </div>
                 </div>
             </form>
-        </div>
+        </fieldset>
     );
 }

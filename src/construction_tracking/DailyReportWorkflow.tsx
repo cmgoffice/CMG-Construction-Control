@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import { CheckCircle, XCircle, Clock, Save, Send, AlertTriangle, MessageSquare, FileText, Edit3, Trash2 } from 'lucide-react';
+import { 
+    CheckCircle, XCircle, Clock, Save, Send, AlertTriangle, MessageSquare, 
+    FileText, Edit3, Trash2, Calendar as CalendarIcon, ChevronDown, ChevronUp, 
+    ChevronLeft, ChevronRight, Check, Eye, AlertCircle, Wrench, Users, 
+    HardHat, Camera, Image as ImageIcon, Layers, Sparkles, Truck 
+} from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthRBACRouter';
 import { col, docRef, storage, logActivity, masterDb } from './firebase';
@@ -7,16 +12,18 @@ import { addDoc, onSnapshot, query, where, updateDoc, deleteDoc, collection } fr
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import SWOCreationForm from './SWOCreationForm';
 import { AlertModal, useAlert } from './AlertModal';
-import { canAccessAllProjects, hasUniversalRoleAccess, isSystemAdmin } from './roleUtils';
+import { canAccessAllProjects, hasUniversalRoleAccess, isSystemAdmin, isViewer } from './roleUtils';
+import { DailyReportCalendar } from './DailyReportCalendar';
 
-type ReportStatus = 'Pending CM' | 'Pending PM' | 'Approved' | 'Rejected';
+type ReportStatus = 'Pending CM' | 'Pending PM' | 'Approved' | 'Rejected' | 'Draft';
 
 const StatusBadge = ({ status, compact }: { status: ReportStatus; compact?: boolean }) => {
-    const styles = {
+    const styles: Record<string, string> = {
         'Pending CM': 'bg-yellow-100 text-yellow-800 border-yellow-200',
         'Pending PM': 'bg-blue-100 text-blue-800 border-blue-200',
         'Approved': 'bg-green-100 text-green-800 border-green-200',
-        'Rejected': 'bg-red-100 text-red-800 border-red-200'
+        'Rejected': 'bg-red-100 text-red-800 border-red-200',
+        'Draft': 'bg-gray-100 text-gray-700 border-gray-200'
     };
 
     const Icon = status === 'Approved' ? CheckCircle : status === 'Rejected' ? XCircle : Clock;
@@ -874,55 +881,36 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
     // Get available dates with reports, sorted
     const availableReportDates = Array.from(new Set(allSwoReports.map(r => r.date).filter(Boolean))).sort();
 
+
+    // Format display date with Thai day of week and month
+    const formatDisplayDate = (dateStr: string) => {
+        if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const date = new Date(y, m - 1, d);
+        const dayNames = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
+        const monthNames = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+        return `${dayNames[date.getDay()]} ${d} ${monthNames[m - 1]} ${y}`;
+    };
+
     const goToPrevDay = () => {
-        const currentIndex = availableReportDates.indexOf(selectedDate);
-        if (currentIndex > 0) {
-            setSelectedDate(availableReportDates[currentIndex - 1]);
-        } else if (currentIndex === -1 && availableReportDates.length > 0) {
-            // If current date is not in available dates, go to the latest available date before current
-            const earlierDates = availableReportDates.filter(date => date < selectedDate);
-            if (earlierDates.length > 0) {
-                setSelectedDate(earlierDates[earlierDates.length - 1]);
-            }
-        }
+        const [y, m, d] = selectedDate.split('-').map(Number);
+        const dt = new Date(y, m - 1, d);
+        dt.setDate(dt.getDate() - 1);
+        setSelectedDate(toLocalDateStr(dt));
     };
 
     const goToNextDay = () => {
-        const currentIndex = availableReportDates.indexOf(selectedDate);
-        if (currentIndex >= 0 && currentIndex < availableReportDates.length - 1) {
-            setSelectedDate(availableReportDates[currentIndex + 1]);
-        } else if (currentIndex === -1 && availableReportDates.length > 0) {
-            // If current date is not in available dates, go to the earliest available date after current
-            const laterDates = availableReportDates.filter(date => date > selectedDate && date <= todayStr);
-            if (laterDates.length > 0) {
-                setSelectedDate(laterDates[0]);
-            }
+        const [y, m, d] = selectedDate.split('-').map(Number);
+        const dt = new Date(y, m - 1, d);
+        dt.setDate(dt.getDate() + 1);
+        const nextDateStr = toLocalDateStr(dt);
+        if (nextDateStr <= todayStr) {
+            setSelectedDate(nextDateStr);
         }
     };
 
-    // Navigation constraints: only allow navigation to dates with actual reports
-    const canGoPrevDay = (() => {
-        const currentIndex = availableReportDates.indexOf(selectedDate);
-        if (currentIndex > 0) return true;
-        if (currentIndex === -1) {
-            const earlierDates = availableReportDates.filter(date => date < selectedDate);
-            return earlierDates.length > 0;
-        }
-        return false;
-    })();
-
-    const canGoNextDay = (() => {
-        const currentIndex = availableReportDates.indexOf(selectedDate);
-        if (currentIndex >= 0 && currentIndex < availableReportDates.length - 1) {
-            const nextDate = availableReportDates[currentIndex + 1];
-            return nextDate <= todayStr;
-        }
-        if (currentIndex === -1) {
-            const laterDates = availableReportDates.filter(date => date > selectedDate && date <= todayStr);
-            return laterDates.length > 0;
-        }
-        return false;
-    })();
+    const canGoPrevDay = true;
+    const canGoNextDay = selectedDate < todayStr;
 
     // Rejected report: editable for 2 days from rejected_at (Supervisor only)
     const isRejectedWithinTwoDays = (report: any): boolean => {
@@ -1249,6 +1237,82 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
         }));
     };
 
+    const handleSaveDraft = async () => {
+        setUploading(true);
+        let attachmentUrls: { name: string; url: string; type: string }[] = existingReport?.attachments || [];
+
+        // Upload files to Firebase Storage
+        if (files && files.length > 0) {
+            try {
+                const uploads = Array.from(files).map(async (file) => {
+                    const path = `daily_reports/${swo.id}/${selectedDate}/${Date.now()}_${file.name}`;
+                    const storageRef = ref(storage, path);
+                    await uploadBytes(storageRef, file);
+                    const url = await getDownloadURL(storageRef);
+                    return { name: file.name, url, type: file.type };
+                });
+                const newUrls = await Promise.all(uploads);
+                attachmentUrls = [...attachmentUrls, ...newUrls];
+            } catch (uploadErr: any) {
+                console.error('[Storage] Upload error:', uploadErr?.code, uploadErr?.message);
+                setUploading(false);
+                showAlert('error', 'อัปโหลดไฟล์ไม่สำเร็จ', uploadErr?.message || 'Upload error');
+                return;
+            }
+        }
+
+        try {
+            const reportData: any = {
+                date: selectedDate,
+                swo_id: swo.id,
+                swo: swo.swo_no,
+                project_id: swo.project_id || '',
+                project_no: getProjectNo(swo.project_id),
+                supervisor: user?.name || swo.supervisor_id,
+                supervisor_name: user?.name || '',
+                supervisor_uid: user?.uid || swo.supervisor_uid || '',
+                work_name: swo.work_name || '',
+                status: 'Draft' as const,
+                cm_notes: existingReport?.cm_notes || '',
+                updated_at: new Date().toISOString(),
+                activities: activities.map((a: any) => {
+                    const parsedToday = parseFloat(String(a.today)) || 0;
+                    const clampedToday = clampTodayProgress(parsedToday, a);
+                    return { ...a, today: clampedToday };
+                }),
+                equipments,
+                workers,
+                notes,
+                attachments: attachmentUrls
+            };
+
+            if (existingReport?.id) {
+                await updateDoc(docRef("daily_reports", existingReport.id), reportData);
+            } else {
+                reportData.created_at = new Date().toISOString();
+                await addDoc(col("daily_reports"), reportData);
+            }
+
+            if (user) {
+                await logActivity({
+                    uid: user.uid,
+                    name: user.name,
+                    role: user.role,
+                    action: 'Save',
+                    menu: 'Daily Report',
+                    detail: `Save Draft Daily Report SWO No. ${swo?.swo_no || ''} Date ${selectedDate}`
+                });
+            }
+            setFiles(null);
+            setUploading(false);
+            showAlert('success', 'บันทึกแบบร่างสำเร็จ', 'ข้อมูลถูกบันทึกเป็นแบบร่างเรียบร้อยแล้ว');
+        } catch (e: any) {
+            console.error('[Firestore] Save draft error:', e);
+            setUploading(false);
+            showAlert('error', 'เกิดข้อผิดพลาดในการบันทึกร่าง', e.message);
+        }
+    };
+
     const handleSubmit = async () => {
         setUploading(true);
         let attachmentUrls: { name: string; url: string; type: string }[] = existingReport?.attachments || [];
@@ -1308,7 +1372,7 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                 reportData.rejected_at = null;
             }
 
-            if (existingReport?.status === 'Rejected') {
+            if (existingReport?.status === 'Rejected' || existingReport?.status === 'Draft' || existingReport?.id) {
                 await updateDoc(docRef("daily_reports", existingReport.id), reportData);
             } else {
                 await addDoc(col("daily_reports"), reportData);
@@ -1359,133 +1423,204 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                     <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-sm bg-black/50 px-3 py-1 rounded truncate max-w-[90vw]">{lightboxImage.name}</p>
                 </div>
             )}
-            <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                <div className="flex items-center gap-4">
-                    {onBack && (
-                        <button onClick={onBack} className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors">
-                            <span className="sr-only">Back</span>
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                        </button>
-                    )}
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Daily Progress Report</h1>
-                        <p className="text-gray-500 mt-1">SWO: <span className="font-semibold text-gray-700">{swo?.swo_no} - {swo?.work_name}</span></p>
-                        <p className={`mt-2 text-lg font-bold ${swo?.closure_status ? 'text-red-700 bg-red-50 px-3 py-1.5 rounded-lg inline-block' : 'text-gray-700'}`}>
-                            SWO Status: {swo?.closure_status ? `Closed - ${swo.closure_status}` : (swo?.status || 'Active')}
-                        </p>
-                        {existingReport && reportSupervisorName && (
-                            <p className="mt-2 text-sm font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-lg inline-block">
-                                Report Owner: Supervisor {reportSupervisorName}
-                            </p>
-                        )}
-                        <div className="flex flex-col sm:flex-row gap-4 mt-2">
-                            <div className="flex items-center gap-2 text-gray-600">
-                                <span className="font-medium">Start Date:</span>
-                                <span className="bg-gray-100 px-2 py-1 rounded text-sm font-medium">
-                                    {swo?.start_date || 'Not specified'}
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-2 text-gray-600">
-                                <span className="font-medium">End Date:</span>
-                                <span className="bg-gray-100 px-2 py-1 rounded text-sm font-medium">
-                                    {swo?.finish_date || 'Not specified'}
-                                </span>
-                            </div>
+            {/* Top Row: 2-Column Split (1/2 SWO Info & Date Selector, 1/2 Permanent Mini Calendar) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 items-stretch w-full min-w-0">
+                {/* Left (1/2): SWO Details & Date Navigator */}
+                <div className="bg-white rounded-xl border border-gray-200/90 shadow-xs p-3 sm:p-3.5 flex flex-col justify-between space-y-2.5 w-full min-w-0 overflow-hidden">
+                    {/* Top Row: Back button, Project, SWO, Status */}
+                    <div className="flex flex-wrap items-center justify-between gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            {onBack && (
+                                <button 
+                                    type="button"
+                                    onClick={onBack} 
+                                    className="p-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-600 transition-colors shadow-2xs cursor-pointer"
+                                    title="ย้อนกลับไปรายการ SWO"
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+                            )}
+                            <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-bold text-xs border border-blue-200/80">
+                                โครงการ: {getProjectNo(swo?.project_id)}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 font-semibold text-xs border border-gray-200">
+                                SWO: {swo?.swo_no}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${
+                                swo?.closure_status ? 'bg-red-50 text-red-700 border-red-200' :
+                                swo?.status === 'Accepted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                'bg-blue-50 text-blue-700 border-blue-200'
+                            }`}>
+                                {swo?.closure_status ? `Closed - ${swo.closure_status}` : (swo?.status || 'Active')}
+                            </span>
                         </div>
                     </div>
-                </div>
-                <div className="text-right">
-                    <p className="text-sm font-medium text-gray-500 mb-1">Date</p>
-                    <div className="flex items-center justify-end gap-2">
-                        <button
-                            onClick={goToPrevDay}
-                            disabled={!canGoPrevDay}
-                            title="Previous Day"
-                            className={`p-1.5 rounded-lg transition-colors ${canGoPrevDay ? 'bg-gray-100 hover:bg-gray-200 text-gray-600' : 'bg-gray-50 text-gray-300 cursor-not-allowed'}`}
-                        >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                        </button>
-                        <p className="text-lg font-bold text-gray-800 min-w-[110px] text-center">{selectedDate}</p>
-                        <button
-                            onClick={goToNextDay}
-                            disabled={!canGoNextDay}
-                            title="Next Day"
-                            className={`p-1.5 rounded-lg transition-colors ${canGoNextDay ? 'bg-gray-100 hover:bg-gray-200 text-gray-600' : 'bg-gray-50 text-gray-300 cursor-not-allowed'}`}
-                        >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                        </button>
-                    </div>
-                    {/* Date-level status hint */}
-                    {isLockedByStatus && reportStatus === 'Approved' && (
-                        <p className="text-xs text-green-600 mt-1 font-medium">✅ Approved – ปิดสำหรับวันนี้</p>
-                    )}
-                    {isLockedByStatus && (reportStatus === 'Pending CM' || reportStatus === 'Pending PM') && (
-                        <p className="text-xs text-yellow-600 mt-1 font-medium">⏳ รอการอนุมัติ</p>
-                    )}
-                    {reportStatus === 'Rejected' && isEditable && (
-                        <p className="text-xs text-red-500 mt-1 font-medium">⚠️ ถูก Reject – แก้ไขและส่งใหม่ได้ภายใน 2 วัน</p>
-                    )}
-                    {reportStatus === 'Rejected' && !isEditable && existingReport?.rejected_at && (
-                        <p className="text-xs text-red-600 mt-1 font-medium">⏱️ หมดเวลาการแก้ไข (2 วันนับจากวันถูก Reject)</p>
-                    )}
-                    {isSupervisorLike && reportStatus === 'none' && selectedDate < yesterdayStr && (
-                        <p className="text-xs text-orange-500 mt-1 font-medium">📅 ส่งรายงานได้เฉพาะวันนี้และเมื่อวาน</p>
-                    )}
-                    {isSupervisorLike && reportStatus === 'none' && selectedDate === yesterdayStr && (
-                        <p className="text-xs text-blue-600 mt-1 font-medium">📅 รายงานเมื่อวาน – สามารถส่งได้</p>
-                    )}
-                    {isSupervisorLike && reportStatus === 'none' && selectedDate < yesterdayStr && (
-                        <p className="text-xs text-gray-500 mt-1 font-medium">📅 ดูข้อมูลย้อนหลัง (ส่งรายงานได้เฉพาะวันนี้และเมื่อวาน)</p>
-                    )}
-                    {existingReportBelongsToAnotherSupervisor && (
-                        <p className="text-xs text-indigo-600 mt-1 font-medium">รายงานนี้เป็นของ Supervisor {reportSupervisorName} - ดูได้อย่างเดียว</p>
-                    )}
-                    {swo?.closure_status && (
-                        <p className="text-xs text-red-600 mt-1 font-medium">🔒 SWO ปิดแล้ว – ดูได้อย่างเดียว (กรอกข้อมูลไม่ได้)</p>
-                    )}
-                    {!isAdminLike && !isSupervisorLike && !swo?.closure_status && (
-                        <p className="text-xs text-red-500 mt-1 font-medium">🔒 View Only</p>
-                    )}
-                </div>
-            </div>
 
-            {/* Supervisor: PM แก้ไขแล้ว — แถบแบน: มีคำขอรอ = แสดงเฉพาะ badge รอ CM/PM (ซ่อนปุ่มขอแก้ไขอีกครั้งและปุ่มยอมรับ); ไม่มีคำขอรอ = แสดงปุ่มขอแก้ไขอีกครั้ง + ยอมรับ */}
-            {isSupervisorLike && swo?.pending_change_acceptance && (
-                <div className="bg-amber-50/90 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                        <Edit3 className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span className="text-amber-800 text-sm font-medium truncate">ขอแก้ไขปริมาณงาน (C1/C2/C3) คำขอจะส่งไปยัง CM</span>
+                    {/* Title & Scope */}
+                    <div>
+                        <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">
+                            Daily Progress Report
+                        </h1>
+                        <p className="text-xs sm:text-sm text-gray-700 mt-0.5 line-clamp-2">
+                            <span className="font-semibold text-gray-500">งาน:</span> <span className="font-semibold text-gray-900">{swo?.work_name || '-'}</span>
+                        </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                        {pendingChangeRequest ? (
-                            <span className="text-xs font-medium text-amber-700 bg-amber-100 border border-amber-200 px-2 py-1 rounded">รอ CM ({pendingChangeRequest.status})</span>
-                        ) : (
-                            <>
-                                <button type="button" onClick={openRequestChangeModal} disabled={requestingChange} className="px-3 py-1.5 text-amber-700 border border-amber-300 rounded-lg text-sm font-medium bg-white hover:bg-amber-100 cursor-pointer disabled:opacity-50">ขอแก้ไขอีกครั้ง</button>
-                                <button type="button" onClick={handleAcceptChange} disabled={requestingChange} className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold cursor-pointer disabled:opacity-50">ยอมรับ</button>
-                            </>
+
+                    {/* Metadata */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 pt-1 border-t border-gray-100">
+                        <span className="inline-flex items-center gap-1">
+                            <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
+                            <span>กรอบเวลา:</span>
+                            <span className="font-semibold text-gray-700 bg-gray-100 px-1.5 py-0.2 rounded text-[11px]">
+                                {swo?.start_date || 'N/A'} ถึง {swo?.finish_date || 'N/A'}
+                            </span>
+                        </span>
+                        {swo?.supervisor_name && (
+                            <span className="inline-flex items-center gap-1">
+                                <Users className="w-3.5 h-3.5 text-gray-400" />
+                                <span>Supervisor:</span>
+                                <span className="font-medium text-gray-700">{swo.supervisor_name}</span>
+                            </span>
+                        )}
+                        {existingReport && reportSupervisorName && reportSupervisorName !== swo?.supervisor_name && (
+                            <span className="inline-flex items-center gap-1 text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded text-[11px] font-medium border border-indigo-100">
+                                <span>ผู้บันทึก:</span>
+                                <span className="font-semibold">{reportSupervisorName}</span>
+                            </span>
                         )}
                     </div>
-                </div>
-            )}
 
-            {/* Supervisor: แถบเล็กแบน — ขอแก้ไขปริมาณงาน (เมื่อ SWO เป็น Accepted และยังไม่มีคำขอรอ) */}
-            {isSupervisorLike && swo?.status === 'Accepted' && !swo?.pending_change_acceptance && (
-                <div className="bg-amber-50/80 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                        <Edit3 className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span className="text-amber-800 text-sm font-medium truncate">ขอแก้ไขปริมาณงาน (C1/C2/C3)</span>
-                        <span className="text-amber-600 text-xs hidden sm:inline">คำขอจะส่งไปยัง CM</span>
+                    {/* Selected Date Navigator Bar */}
+                    <div className="bg-gray-50/90 p-2 rounded-lg border border-gray-200 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1">
+                            <span className="text-xs font-semibold text-gray-500 mr-0.5">วันที่:</span>
+                            <button
+                                type="button"
+                                onClick={goToPrevDay}
+                                disabled={!canGoPrevDay}
+                                title="วันก่อนหน้า"
+                                className="p-1 rounded-md hover:bg-white text-gray-600 disabled:opacity-30 cursor-pointer border border-transparent hover:border-gray-200 transition-colors"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-white rounded-md border border-gray-200 shadow-2xs">
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${
+                                    reportStatus === 'Approved' ? 'bg-emerald-500 ring-2 ring-emerald-200' :
+                                    (reportStatus === 'Pending CM' || reportStatus === 'Pending PM') ? 'bg-amber-500 ring-2 ring-amber-200 animate-pulse' :
+                                    reportStatus === 'Rejected' ? 'bg-rose-500 ring-2 ring-rose-200' :
+                                    reportStatus === 'Draft' ? 'bg-blue-400' :
+                                    'bg-gray-300'
+                                }`} />
+                                <span className="text-xs font-bold text-gray-900">{selectedDate}</span>
+                                <span className="text-[10px] text-gray-500 hidden sm:inline">({formatDisplayDate(selectedDate)})</span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={goToNextDay}
+                                disabled={!canGoNextDay}
+                                title="วันถัดไป"
+                                className="p-1 rounded-md hover:bg-white text-gray-600 disabled:opacity-30 cursor-pointer border border-transparent hover:border-gray-200 transition-colors"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        {/* Date Status Badge */}
+                        <div>
+                            {isLockedByStatus && reportStatus === 'Approved' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <Check className="w-3 h-3" /> Approved – ได้รับการอนุมัติแล้ว
+                                </span>
+                            )}
+                            {isLockedByStatus && (reportStatus === 'Pending CM' || reportStatus === 'Pending PM') && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                    <Clock className="w-3 h-3" /> รออนุมัติ ({reportStatus})
+                                </span>
+                            )}
+                            {reportStatus === 'Rejected' && isEditable && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                    <AlertCircle className="w-3 h-3" /> ถูก Reject – แก้ไขได้ใน 2 วัน
+                                </span>
+                            )}
+                            {reportStatus === 'Rejected' && !isEditable && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-800 border border-rose-300">
+                                    ⏱️ หมดเวลาแก้ไข
+                                </span>
+                            )}
+                            {reportStatus === 'Draft' && isEditable && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                    <FileText className="w-3 h-3" /> แบบร่าง (Draft)
+                                </span>
+                            )}
+                            {isSupervisorLike && (reportStatus === 'none' || !existingReport) && selectedDate === todayStr && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                    ✨ รายงานวันนี้ – พร้อมกรอก
+                                </span>
+                            )}
+                            {isSupervisorLike && (reportStatus === 'none' || !existingReport) && selectedDate === yesterdayStr && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    📅 รายงานเมื่อวาน
+                                </span>
+                            )}
+                            {isSupervisorLike && (reportStatus === 'none' || !existingReport) && selectedDate < yesterdayStr && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                                    📅 ดูข้อมูลย้อนหลัง
+                                </span>
+                            )}
+                            {swo?.closure_status && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700 border border-red-200">
+                                    🔒 SWO ปิดแล้ว
+                                </span>
+                            )}
+                        </div>
                     </div>
-                    {pendingChangeRequest ? (
-                        <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-1 rounded shrink-0">รอ CM ({pendingChangeRequest.status})</span>
-                    ) : (
-                        <button type="button" onClick={openRequestChangeModal} disabled={requestingChange} className="shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg flex items-center gap-1">
-                            <Edit3 className="w-3.5 h-3.5" /> ขอแก้ไข
-                        </button>
+
+                    {/* Change Request Banner (compact) */}
+                    {isSupervisorLike && swo?.pending_change_acceptance && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2 text-xs">
+                            <span className="text-amber-800 font-medium truncate">ขอแก้ไขปริมาณ (C1/C2/C3) ส่งไปยัง CM</span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                                {pendingChangeRequest ? (
+                                    <span className="font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded">รอ CM ({pendingChangeRequest.status})</span>
+                                ) : (
+                                    <>
+                                        <button type="button" onClick={openRequestChangeModal} disabled={requestingChange} className="px-2 py-0.5 text-amber-700 border border-amber-300 rounded bg-white hover:bg-amber-100 text-xs cursor-pointer">ขอแก้ไข</button>
+                                        <button type="button" onClick={handleAcceptChange} disabled={requestingChange} className="px-2.5 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded font-semibold text-xs cursor-pointer">ยอมรับ</button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    {isSupervisorLike && swo?.status === 'Accepted' && !swo?.pending_change_acceptance && (
+                        <div className="bg-amber-50/70 border border-amber-200 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2 text-xs">
+                            <span className="text-amber-800 font-medium truncate">ขอแก้ไขปริมาณงาน (C1/C2/C3)</span>
+                            {pendingChangeRequest ? (
+                                <span className="font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded">รอ CM ({pendingChangeRequest.status})</span>
+                            ) : (
+                                <button type="button" onClick={openRequestChangeModal} disabled={requestingChange} className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded flex items-center gap-1 text-xs cursor-pointer">
+                                    <Edit3 className="w-3 h-3" /> ขอแก้ไข
+                                </button>
+                            )}
+                        </div>
                     )}
                 </div>
-            )}
+
+                {/* Right (1/2): Permanent Mini Monthly Calendar (แสดงตลอดเวลา เล็กๆ) */}
+                <div className="w-full flex">
+                    <DailyReportCalendar
+                        selectedDate={selectedDate}
+                        onSelectDate={(newDate) => setSelectedDate(newDate)}
+                        swoReports={allSwoReports}
+                        swoStartDate={swo?.start_date}
+                        swoEndDate={swo?.finish_date}
+                        todayStr={todayStr}
+                        yesterdayStr={yesterdayStr}
+                        isSupervisorLike={isSupervisorLike}
+                        isAdminLike={isAdminLike}
+                        compact={true}
+                    />
+                </div>
+            </div>
 
             {/* Modal: เลือกรายการที่จะขอแก้ไข + เหตุผล */}
             {requestChangeModalOpen && (
@@ -1539,291 +1674,630 @@ export const DailyReportForm = ({ onBack, swo, onSwoAccepted, allEquipments = []
                             </div>
                         </div>
                         <div className="px-4 py-3 border-t flex justify-end gap-2">
-                            <button type="button" onClick={() => setRequestChangeModalOpen(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50">ยกเลิก</button>
-                            <button type="button" onClick={handleRequestChange} disabled={requestingChange} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50">ส่งคำขอแก้ไข</button>
+                            <button type="button" onClick={() => setRequestChangeModalOpen(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 cursor-pointer">ยกเลิก</button>
+                            <button type="button" onClick={handleRequestChange} disabled={requestingChange} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-semibold cursor-pointer disabled:opacity-50">ส่งคำขอไปยัง CM</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Status Banner */}
-            {reportStatus === 'Approved' && (
-                <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-5 py-3">
-                    <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
-                    <div>
-                        <p className="font-semibold text-green-800">รายงานวันนี้ได้รับการอนุมัติแล้ว</p>
-                        <p className="text-xs text-green-600">ไม่สามารถแก้ไขข้อมูลได้อีก กรุณารอวันถัดไปเพื่อส่งรายงานใหม่</p>
-                    </div>
-                </div>
-            )}
-            {(reportStatus === 'Pending CM' || reportStatus === 'Pending PM') && (
-                <div className="flex items-center gap-3 bg-yellow-50 border border-yellow-200 rounded-xl px-5 py-3">
-                    <Clock className="w-5 h-5 text-yellow-600 shrink-0" />
-                    <div>
-                        <p className="font-semibold text-yellow-800">รายงานอยู่ระหว่างรอการอนุมัติ ({reportStatus})</p>
-                        <p className="text-xs text-yellow-600">ไม่สามารถแก้ไขได้จนกว่า CM/PM จะพิจารณา</p>
-                    </div>
-                </div>
-            )}
-            {reportStatus === 'Rejected' && (
-                <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-5 py-4">
-                    <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                    <div>
-                        <p className="font-semibold text-red-800">รายงานถูก Reject</p>
-                        {existingReport?.reject_reason ? (
-                            <p className="text-sm text-red-700 mt-1 font-medium">เหตุผล: {existingReport.reject_reason}</p>
-                        ) : null}
-                        {isEditable ? (
-                            <p className="text-xs text-red-600 mt-1">คุณมีเวลา 2 วัน (นับจากวันถูก Reject) ในการแก้ไขและกด Resubmit เพื่อส่งขออนุมัติอีกครั้ง</p>
-                        ) : (
-                            <p className="text-xs text-red-500 mt-1">หมดเวลาการแก้ไขแล้ว (เกิน 2 วันนับจากวันถูก Reject)</p>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* Review Notes from CM/PM - Show when report has been reviewed */}
-            {existingReport && (existingReport.cm_notes || existingReport.cm_approved_by || existingReport.pm_approved_by) && (
-                <div className="bg-purple-50 border border-purple-200 rounded-xl overflow-hidden">
-                    <div className="px-4 py-2 bg-purple-100 border-b border-purple-200 flex items-center gap-2">
-                        <MessageSquare className="w-4 h-4 text-purple-600" />
-                        <span className="font-semibold text-purple-800 text-sm">Review Notes from CM/PM</span>
-                    </div>
-                    <div className="p-4 space-y-3">
-                        {/* CM Review */}
-                        {(existingReport.cm_approved_by || existingReport.cm_notes) && (
-                            <div className="bg-white rounded-lg p-3 border border-purple-100">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded">CM</span>
-                                    {existingReport.cm_approved_by && (
-                                        <span className="text-xs text-gray-500">Reviewed by: <span className="font-medium text-gray-700">{existingReport.cm_approved_by}</span></span>
-                                    )}
-                                </div>
-                                {existingReport.cm_notes ? (
-                                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{existingReport.cm_notes}</p>
-                                ) : (
-                                    <p className="text-xs text-gray-400 italic">No notes added</p>
-                                )}
+            {/* Status Notices & Review Notes Row (Compact) */}
+            {(reportStatus === 'Approved' || reportStatus === 'Rejected' || (existingReport && (existingReport.cm_notes || existingReport.cm_approved_by || existingReport.pm_approved_by))) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    {/* Approved / Rejected notice */}
+                    {reportStatus === 'Approved' && (
+                        <div className="flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2">
+                            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <div className="text-xs">
+                                <p className="font-bold text-emerald-800">รายงานวันนี้ได้รับการอนุมัติแล้ว</p>
+                                <p className="text-emerald-600">ข้อมูลถูกบันทึกสมบูรณ์แล้ว ไม่สามารถแก้ไขได้อีก</p>
                             </div>
-                        )}
-
-                        {/* PM Review */}
-                        {existingReport.pm_approved_by && (
-                            <div className="bg-white rounded-lg p-3 border border-purple-100">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded">PM</span>
-                                    <span className="text-xs text-gray-500">Final Approval by: <span className="font-medium text-gray-700">{existingReport.pm_approved_by}</span></span>
-                                </div>
-                                {existingReport.pm_notes ? (
-                                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{existingReport.pm_notes}</p>
-                                ) : (
-                                    <p className="text-xs text-gray-400 italic">No notes added</p>
-                                )}
+                        </div>
+                    )}
+                    {reportStatus === 'Rejected' && (
+                        <div className="flex items-start gap-2.5 bg-rose-50 border border-rose-200 rounded-xl px-3.5 py-2">
+                            <XCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                            <div className="text-xs">
+                                <p className="font-bold text-rose-800">รายงานถูก Reject</p>
+                                {existingReport?.reject_reason ? (
+                                    <p className="text-rose-700 font-medium mt-0.5">เหตุผล: {existingReport.reject_reason}</p>
+                                ) : null}
+                                <p className="text-rose-600 mt-0.5">
+                                    {isEditable ? 'คุณมีเวลา 2 วันนับจากวันถูก Reject ในการแก้ไขและส่งใหม่' : 'หมดเวลาการแก้ไขแล้ว (เกิน 2 วัน)'}
+                                </p>
                             </div>
-                        )}
-                    </div>
-                </div>
-            )}
+                        </div>
+                    )}
 
-            {/* C1: Activities */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
-                <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 font-semibold text-gray-800">
-                    Work Activities (C1)
-                </div>
-                <table className="w-full text-sm text-left text-gray-600">
-                    <thead className="bg-white text-gray-500 italic border-b border-gray-100">
-                        <tr>
-                            <th className="px-6 py-3 font-medium">Description</th>
-                            <th className="px-6 py-3 font-medium">Qty Required</th>
-                            <th className="px-6 py-3 font-medium">Prev Total</th>
-                            <th className="px-6 py-3 font-medium text-blue-600 bg-blue-50/30">Today's Progress</th>
-                            <th className="px-6 py-3 font-medium text-right">Up to Date</th>
-                            <th className="px-6 py-3 font-medium text-right">% Complete</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                        {activities.map((a: any) => {
-                            const todayNum = parseFloat(String(a.today)) || 0;
-                            const clampedTodayNum = clampTodayProgress(todayNum, a);
-                            const upToDate = Math.min((Number(a.total) || 0), (Number(a.prev_total) || 0) + clampedTodayNum);
-                            const percentNum = (Number(a.total) || 0) > 0 ? Math.min(100, (upToDate / Number(a.total)) * 100) : 0;
-                            const percent = percentNum.toFixed(1);
-
-                            return (
-                                <tr key={a.id} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 font-medium text-gray-800">{a.desc}</td>
-                                    <td className="px-6 py-4">{a.total} {a.unit}</td>
-                                    <td className="px-6 py-4 text-gray-500">{formatProgressValue(a.prev_total)} {a.unit}</td>
-                                    <td className="px-6 py-4 bg-blue-50/10">
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="text"
-                                                inputMode="decimal"
-                                                className={`w-24 p-2 border border-blue-200 rounded outline-none text-right font-medium ${isReadOnly ? 'bg-gray-100/50 cursor-not-allowed text-gray-400' : 'focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
-                                                value={a.today ?? ''}
-                                                onChange={(e) => handleActivityChange(a.id, e.target.value)}
-                                                placeholder="0.0"
-                                                disabled={isReadOnly}
-                                            />
-                                            <span className="text-xs text-gray-500">{a.unit}</span>
+                    {/* Review Notes from CM/PM */}
+                    {existingReport && (existingReport.cm_notes || existingReport.cm_approved_by || existingReport.pm_approved_by) && (
+                        <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-2.5">
+                            <div className="flex items-center gap-1.5 mb-1">
+                                <MessageSquare className="w-3.5 h-3.5 text-purple-600" />
+                                <span className="font-bold text-purple-900 text-xs">Review Notes from CM/PM</span>
+                            </div>
+                            <div className="space-y-1 text-xs">
+                                {(existingReport.cm_approved_by || existingReport.cm_notes) && (
+                                    <div className="bg-white rounded-lg p-1.5 border border-purple-100">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="px-1.5 py-0.2 bg-blue-100 text-blue-700 text-[10px] font-bold rounded">CM</span>
+                                            {existingReport.cm_approved_by && (
+                                                <span className="text-[11px] text-gray-500">Reviewed by: <span className="font-medium text-gray-700">{existingReport.cm_approved_by}</span></span>
+                                            )}
                                         </div>
-                                    </td>
-                                    <td className="px-6 py-4 text-right font-semibold text-gray-800">{formatProgressValue(upToDate)} {a.unit}</td>
-                                    <td className="px-6 py-4 text-right">
-                                        <span className={`px-2 py-1 rounded text-xs font-bold ${parseFloat(percent) >= 100 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                                            }`}>
-                                            {percent}%
-                                        </span>
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* C2: Equipment */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="px-6 py-4 bg-orange-50 border-b border-orange-100 font-semibold text-orange-800">
-                    Equipment Usage (C2)
-                </div>
-                <div className="p-6 grid gap-4">
-                    {equipments.map((e: any) => (
-                        <div key={e.id} className="flex flex-col md:flex-row gap-4 items-start md:items-center bg-gray-50 p-4 rounded-lg border border-gray-100">
-                            <div className="w-full md:w-1/4 font-medium text-gray-800">{e.name}</div>
-                            <select className={`w-full md:w-1/4 p-2 border border-gray-300 rounded outline-none ${isReadOnly ? 'bg-gray-100 cursor-not-allowed text-gray-500' : 'focus:ring-2 focus:ring-orange-500'}`} disabled={isReadOnly}>
-                                <option>Working</option>
-                                <option>Broken Down</option>
-                                <option>Idle</option>
-                            </select>
-                            <input type="text" placeholder="Work detail (e.g. excavated 10 pits)" disabled={isReadOnly} value={e.work_detail} onChange={(evt) => setEquipments(equipments.map((eq: any) => eq.id === e.id ? { ...eq, work_detail: evt.target.value } : eq))} className={`w-full md:flex-1 p-2 border border-gray-300 rounded outline-none ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : 'focus:ring-2 focus:ring-orange-500'}`} />
-                            <div className="w-full md:w-32 relative">
-                                <input type="number" placeholder="Hours" disabled={isReadOnly} value={e.hours} onChange={(evt) => setEquipments(equipments.map((eq: any) => eq.id === e.id ? { ...eq, hours: Number(evt.target.value) } : eq))} className={`w-full p-2 pr-12 border border-gray-300 rounded outline-none ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : 'focus:ring-2 focus:ring-orange-500'}`} />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">hrs</span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* C3: Workers */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="px-6 py-4 bg-indigo-50 border-b border-indigo-100 font-semibold text-indigo-800">
-                    Worker Headcount (C3)
-                </div>
-                <div className="p-6 grid gap-4">
-                    {workers.map((w: any) => (
-                        <div key={w.id} className="flex flex-col md:flex-row gap-4 items-start md:items-center bg-gray-50 p-4 rounded-lg border border-gray-100">
-                            <div className="w-full md:w-1/3 font-medium text-gray-800">{w.name}</div>
-                            <div className="w-full md:flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Total Present</label>
-                                    <input type="number" placeholder="0" disabled={isReadOnly} value={w.actual_headcount} onChange={(evt) => setWorkers(workers.map((wo: any) => wo.id === w.id ? { ...wo, actual_headcount: Number(evt.target.value) } : wo))} className={`w-full p-2 border border-gray-300 rounded outline-none ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : 'focus:ring-2 focus:ring-indigo-500'}`} />
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Male</label>
-                                    <input type="number" placeholder="0" disabled={isReadOnly} value={w.male} onChange={(evt) => setWorkers(workers.map((wo: any) => wo.id === w.id ? { ...wo, male: Number(evt.target.value) } : wo))} className={`w-full p-2 border border-gray-300 rounded outline-none ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : 'focus:ring-2 focus:ring-indigo-500'}`} />
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Female</label>
-                                    <input type="number" placeholder="0" disabled={isReadOnly} value={w.female} onChange={(evt) => setWorkers(workers.map((wo: any) => wo.id === w.id ? { ...wo, female: Number(evt.target.value) } : wo))} className={`w-full p-2 border border-gray-300 rounded outline-none ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : 'focus:ring-2 focus:ring-indigo-500'}`} />
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-
-                    {/* Note and File Upload */}
-                    <div className="mt-4 space-y-4 pt-4 border-t border-gray-100">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Daily Report Notes & Remarks</label>
-                            <textarea
-                                rows={3}
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                                disabled={isReadOnly}
-                                placeholder={isReadOnly ? "No notes added by supervisor." : "Add detailed notes, issues, or observations here..."}
-                                className={`w-full p-3 border border-gray-300 rounded-lg outline-none resize-y ${isReadOnly ? 'bg-gray-50 cursor-not-allowed text-gray-500' : 'focus:ring-2 focus:ring-indigo-500'}`}
-                            ></textarea>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Upload Site Photos & Attachments</label>
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                                <input
-                                    type="file"
-                                    multiple
-                                    accept="image/*,.pdf,.doc,.docx"
-                                    onChange={(e) => setFiles(e.target.files)}
-                                    disabled={isReadOnly || uploading}
-                                    className={`w-full md:w-1/2 text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold ${isReadOnly ? 'opacity-50 cursor-not-allowed file:bg-gray-200 file:text-gray-500' : 'file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer'} border border-gray-300 rounded-lg p-2 transition-colors`}
-                                />
-                                {files && files.length > 0 && (
-                                    <span className="text-sm font-medium text-green-600 bg-green-50 px-3 py-1 rounded-full text-nowrap">
-                                        {files.length} file(s) ready to upload
-                                    </span>
-                                )}
-                            </div>
-                            {/* Existing attachments: Site Photos & Attachments grid with thumbnails */}
-                            {(existingReport?.attachments || []).length > 0 && (
-                                <div className="mt-4 rounded-xl border border-gray-200 overflow-hidden">
-                                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 font-semibold text-gray-800 text-sm flex items-center gap-2">
-                                        📎 Site Photos & Attachments
-                                        <span className="ml-1 bg-gray-200 text-gray-600 text-xs font-bold px-2 py-0.5 rounded-full">
-                                            {(existingReport.attachments as { name: string; url: string; type: string }[]).length}
-                                        </span>
-                                    </div>
-                                    <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[320px] overflow-y-auto">
-                                        {(existingReport.attachments as { name: string; url: string; type: string }[]).map((att, i) =>
-                                            att.type?.startsWith('image/') ? (
-                                                <button
-                                                    key={i}
-                                                    type="button"
-                                                    onClick={() => setLightboxImage({ url: att.url, name: att.name })}
-                                                    className="block w-full text-left rounded-lg overflow-hidden border border-gray-200 bg-white hover:border-indigo-400 hover:shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
-                                                >
-                                                    <div className="aspect-[4/3] bg-gray-100 overflow-hidden">
-                                                        <img
-                                                            src={att.url}
-                                                            alt={att.name}
-                                                            className="w-full h-full object-cover"
-                                                        />
-                                                    </div>
-                                                    <p className="px-3 py-1.5 text-xs text-gray-500 truncate bg-white border-t border-gray-100">{att.name}</p>
-                                                </button>
-                                            ) : (
-                                                <a
-                                                    key={i}
-                                                    href={att.url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors"
-                                                >
-                                                    <span className="text-2xl">📄</span>
-                                                    <span className="text-sm text-indigo-700 font-medium truncate hover:underline">{att.name}</span>
-                                                </a>
-                                            )
+                                        {existingReport.cm_notes && (
+                                            <p className="text-[11px] text-gray-700 mt-0.5">{existingReport.cm_notes}</p>
                                         )}
                                     </div>
-                                </div>
-                            )}
+                                )}
+                                {existingReport.pm_approved_by && (
+                                    <div className="bg-white rounded-lg p-1.5 border border-purple-100">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="px-1.5 py-0.2 bg-green-100 text-green-700 text-[10px] font-bold rounded">PM</span>
+                                            <span className="text-[11px] text-gray-500">Final Approval: <span className="font-medium text-gray-700">{existingReport.pm_approved_by}</span></span>
+                                        </div>
+                                        {existingReport.pm_notes && (
+                                            <p className="text-[11px] text-gray-700 mt-0.5">{existingReport.pm_notes}</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
+                    )}
+                </div>
+            )}
+
+            {/* C1: Work Activities (Compact Table) */}
+            {(() => {
+                const overallTotalRequired = activities.reduce((sum: number, a: any) => sum + (Number(a.total) || 0), 0);
+                const overallUpToDate = activities.reduce((sum: number, a: any) => {
+                    const todayNum = parseFloat(String(a.today)) || 0;
+                    const clamped = clampTodayProgress(todayNum, a);
+                    return sum + Math.min((Number(a.total) || 0), (Number(a.prev_total) || 0) + clamped);
+                }, 0);
+                const overallPercent = overallTotalRequired > 0 ? Math.min(100, (overallUpToDate / overallTotalRequired) * 100).toFixed(1) : '0.0';
+
+                return (
+                    <div className="bg-white rounded-xl shadow-xs border border-gray-200/90 overflow-hidden w-full min-w-0">
+                        {/* Section Header */}
+                        <div className="px-4 py-2.5 bg-gradient-to-r from-blue-50/70 via-gray-50 to-white border-b border-gray-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold shadow-xs">
+                                    <Layers className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-1.5">
+                                        <h2 className="text-sm font-bold text-gray-900">Work Activities (C1)</h2>
+                                        <span className="text-[11px] text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200/60">
+                                            {activities.length} รายการ
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-gray-500">บันทึกปริมาณงานที่ทำได้ประจำวัน และตรวจสอบความก้าวหน้าสะสม</p>
+                                </div>
+                            </div>
+
+                            {/* Overall SWO Progress Summary Bar */}
+                            <div className="flex items-center gap-2.5 bg-white px-3 py-1 rounded-lg border border-gray-200 shadow-2xs">
+                                <div className="text-right">
+                                    <p className="text-[10px] text-gray-500 font-medium leading-none">ความก้าวหน้ารวม SWO</p>
+                                    <p className="text-xs font-bold text-blue-700 leading-tight mt-0.5">{overallPercent}%</p>
+                                </div>
+                                <div className="w-20 bg-gray-100 rounded-full h-1.5 overflow-hidden border border-gray-200">
+                                    <div 
+                                        className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-blue-500 to-indigo-600"
+                                        style={{ width: `${Math.min(100, Math.max(0, parseFloat(overallPercent)))}%` }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Activities Table */}
+                        <div className="overflow-x-auto w-full min-w-0">
+                            <table className="w-full text-xs sm:text-sm text-left text-gray-600">
+                                <thead className="bg-gray-50/75 text-gray-600 text-[11px] font-semibold border-b border-gray-200 uppercase tracking-wider">
+                                    <tr>
+                                        <th className="px-3.5 py-2 min-w-[180px]">รายการงาน (Description)</th>
+                                        <th className="px-3 py-2 text-right whitespace-nowrap">แผนงานรวม (Target)</th>
+                                        <th className="px-3 py-2 text-right whitespace-nowrap">สะสมยกมา (Previous)</th>
+                                        <th className="px-3.5 py-2 text-right bg-blue-50/40 text-blue-900 border-x border-blue-100/70 whitespace-nowrap min-w-[140px]">
+                                            ผลงานวันนี้ (Today)
+                                        </th>
+                                        <th className="px-3 py-2 text-right whitespace-nowrap">สะสมถึงวันนี้ (Up to date)</th>
+                                        <th className="px-3.5 py-2 text-right whitespace-nowrap min-w-[90px]">ความก้าวหน้า</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200/70">
+                                    {activities.map((a: any) => {
+                                        const prev = Number(a.prev_total) || 0;
+                                        const total = Number(a.total) || 0;
+                                        const todayNum = parseFloat(String(a.today)) || 0;
+                                        const clampedToday = clampTodayProgress(todayNum, a);
+                                        const upToDate = Math.min(total, prev + clampedToday);
+                                        const percent = total > 0 ? Math.min(100, (upToDate / total) * 100).toFixed(1) : '0.0';
+                                        const remaining = Math.max(0, total - prev);
+
+                                        return (
+                                            <tr key={a.id} className="hover:bg-blue-50/30 transition-colors">
+                                                <td className="px-3.5 py-2 font-medium text-gray-900">
+                                                    <div className="text-xs sm:text-sm font-semibold text-gray-900">{a.desc || a.description}</div>
+                                                    <span className="text-[10px] text-gray-400 bg-gray-100 px-1 py-0.2 rounded border border-gray-200">
+                                                        หน่วย: {a.unit}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2 text-right font-medium text-gray-700">
+                                                    {formatProgressValue(total)} <span className="text-[10px] text-gray-400">{a.unit}</span>
+                                                </td>
+                                                <td className="px-3 py-2 text-right font-medium text-gray-500">
+                                                    {formatProgressValue(prev)} <span className="text-[10px] text-gray-400">{a.unit}</span>
+                                                </td>
+                                                <td className="px-3.5 py-2 text-right bg-blue-50/20 border-x border-blue-100/50">
+                                                    <div className="flex flex-col items-end gap-0.5">
+                                                        <div className="relative w-full max-w-[120px]">
+                                                            <input
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                disabled={isReadOnly}
+                                                                value={a.today ?? ''}
+                                                                onChange={(e) => handleActivityChange(a.id, e.target.value)}
+                                                                placeholder="0"
+                                                                className={`w-full py-1 pl-2 pr-7 border rounded-lg text-xs sm:text-sm font-bold text-right outline-none transition-all ${
+                                                                    isReadOnly 
+                                                                        ? 'bg-gray-100 cursor-not-allowed text-gray-500 border-gray-200' 
+                                                                        : 'bg-white border-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-blue-900 shadow-2xs'
+                                                                }`}
+                                                            />
+                                                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-medium text-gray-400 pointer-events-none">
+                                                                {a.unit}
+                                                            </span>
+                                                        </div>
+                                                        {!isReadOnly && remaining > 0 && (
+                                                            <span className="text-[9px] text-gray-400">
+                                                                คงเหลือ: {formatProgressValue(remaining)}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-3 py-2 text-right font-bold text-gray-900">
+                                                    {formatProgressValue(upToDate)} <span className="text-[10px] font-normal text-gray-400">{a.unit}</span>
+                                                </td>
+                                                <td className="px-3.5 py-2 text-right">
+                                                    <div className="flex flex-col items-end gap-1">
+                                                        <span className={`inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                                                            parseFloat(percent) >= 100 
+                                                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                                                : parseFloat(percent) > 0 
+                                                                    ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                                                                    : 'bg-gray-100 text-gray-600 border border-gray-200'
+                                                        }`}>
+                                                            {percent}%
+                                                        </span>
+                                                        <div className="w-14 bg-gray-100 rounded-full h-1 overflow-hidden">
+                                                            <div 
+                                                                className={`h-full rounded-full ${
+                                                                    parseFloat(percent) >= 100 ? 'bg-emerald-500' : 'bg-blue-600'
+                                                                }`}
+                                                                style={{ width: `${Math.min(100, Math.max(0, parseFloat(percent)))}%` }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                );
+            })()}
+
+            {/* 2-Column Split: C2 Equipment (Left 1/2) & C3 Worker Headcount (Right 1/2) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 items-start w-full min-w-0">
+                {/* C2: Equipment Usage */}
+                <div className="bg-white rounded-xl shadow-xs border border-gray-200/90 overflow-hidden w-full min-w-0">
+                    <div className="px-3.5 py-2.5 bg-gradient-to-r from-amber-50/70 via-gray-50 to-white border-b border-gray-200/80 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-lg bg-amber-600 text-white flex items-center justify-center font-bold shadow-xs">
+                                <Truck className="w-3.5 h-3.5" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-1.5">
+                                    <h2 className="text-sm font-bold text-gray-900">Equipment Usage (C2)</h2>
+                                    <span className="text-[10px] text-amber-700 font-semibold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/60">
+                                        {equipments.length} เครื่อง
+                                    </span>
+                                </div>
+                                <p className="text-[10px] text-gray-500">สถานะและชั่วโมงการทำงานของเครื่องจักร</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-3">
+                        {equipments.length === 0 ? (
+                            <div className="text-center py-6 text-gray-400 italic text-xs bg-gray-50/50 rounded-lg border border-dashed border-gray-200">
+                                ไม่มีเครื่องจักรใน SWO นี้
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {equipments.map((e: any) => (
+                                    <div 
+                                        key={e.id} 
+                                        className="bg-gray-50/60 hover:bg-gray-50 p-2.5 rounded-lg border border-gray-200/70 transition-colors space-y-2"
+                                    >
+                                        {/* Equipment Name & Status Select */}
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <div className="w-6 h-6 rounded bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                                                    <Wrench className="w-3 h-3" />
+                                                </div>
+                                                <div className="truncate">
+                                                    <span className="font-bold text-gray-900 text-xs">{e.name}</span>
+                                                    <span className="ml-1 text-[10px] text-gray-400 font-mono">({e.equipment_id || 'EQM'})</span>
+                                                </div>
+                                            </div>
+
+                                            <select 
+                                                value={e.status || 'Working'}
+                                                onChange={(evt) => setEquipments(equipments.map((eq: any) => eq.id === e.id ? { ...eq, status: evt.target.value } : eq))}
+                                                className={`py-1 px-2 border rounded-md text-xs font-semibold outline-none transition-all shrink-0 ${
+                                                    isReadOnly ? 'bg-gray-100 cursor-not-allowed text-gray-500 border-gray-200' :
+                                                    e.status === 'Broken Down' ? 'bg-rose-50 border-rose-300 text-rose-700' :
+                                                    e.status === 'Idle' ? 'bg-amber-50 border-amber-300 text-amber-700' :
+                                                    'bg-white border-emerald-300 text-emerald-700 shadow-2xs'
+                                                }`}
+                                                disabled={isReadOnly}
+                                            >
+                                                <option value="Working">🟢 ปกติ</option>
+                                                <option value="Broken Down">🔴 ชำรุด</option>
+                                                <option value="Idle">⚪ จอดพัก</option>
+                                            </select>
+                                        </div>
+
+                                        {/* Work Detail & Hours Inputs */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                                            <div className="sm:col-span-8">
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="รายละเอียดงาน (เช่น ขุดหลุม, เทปูน)" 
+                                                    disabled={isReadOnly} 
+                                                    value={e.work_detail || ''} 
+                                                    onChange={(evt) => setEquipments(equipments.map((eq: any) => eq.id === e.id ? { ...eq, work_detail: evt.target.value } : eq))} 
+                                                    className={`w-full py-1 px-2 border rounded-md text-xs outline-none transition-all ${
+                                                        isReadOnly ? 'bg-gray-100 cursor-not-allowed text-gray-500 border-gray-200' : 'bg-white border-gray-300 focus:ring-1 focus:ring-amber-500 shadow-2xs'
+                                                    }`} 
+                                                />
+                                            </div>
+                                            <div className="sm:col-span-4 relative">
+                                                <input 
+                                                    type="number" 
+                                                    placeholder="0" 
+                                                    disabled={isReadOnly} 
+                                                    value={e.hours ?? ''} 
+                                                    onChange={(evt) => setEquipments(equipments.map((eq: any) => eq.id === e.id ? { ...eq, hours: Number(evt.target.value) } : eq))} 
+                                                    className={`w-full py-1 pl-2 pr-7 border rounded-md text-xs font-bold text-right outline-none transition-all ${
+                                                        isReadOnly ? 'bg-gray-100 cursor-not-allowed text-gray-500 border-gray-200' : 'bg-white border-gray-300 focus:ring-1 focus:ring-amber-500 shadow-2xs'
+                                                    }`} 
+                                                />
+                                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-medium text-gray-400 pointer-events-none">ชม.</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* C3: Worker Headcount */}
+                {(() => {
+                    const totalHeadcount = workers.reduce((sum: number, w: any) => sum + (Number(w.actual_headcount) || 0), 0);
+                    const totalMale = workers.reduce((sum: number, w: any) => sum + (Number(w.male) || 0), 0);
+                    const totalFemale = workers.reduce((sum: number, w: any) => sum + (Number(w.female) || 0), 0);
+
+                    return (
+                        <div className="bg-white rounded-xl shadow-xs border border-gray-200/90 overflow-hidden w-full min-w-0">
+                            <div className="px-3.5 py-2.5 bg-gradient-to-r from-indigo-50/70 via-gray-50 to-white border-b border-gray-200/80 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold shadow-xs">
+                                        <Users className="w-3.5 h-3.5" />
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-1.5">
+                                            <h2 className="text-sm font-bold text-gray-900">Worker Headcount (C3)</h2>
+                                            <span className="text-[10px] text-indigo-700 font-semibold bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200/60">
+                                                {workers.length} ทีม
+                                            </span>
+                                        </div>
+                                        <p className="text-[10px] text-gray-500">บันทึกจำนวนแรงงาน ชาย / หญิง ประจำวัน</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Summary KPI Mini Bar */}
+                            <div className="grid grid-cols-3 gap-1 px-3 py-1.5 bg-indigo-50/40 border-b border-indigo-100 text-center text-[11px]">
+                                <div>
+                                    <span className="text-gray-500 text-[10px]">รวมทั้งหมด:</span>
+                                    <span className="ml-1 font-bold text-indigo-900">{totalHeadcount} คน</span>
+                                </div>
+                                <div>
+                                    <span className="text-gray-500 text-[10px]">ชาย:</span>
+                                    <span className="ml-1 font-bold text-blue-700">{totalMale} คน</span>
+                                </div>
+                                <div>
+                                    <span className="text-gray-500 text-[10px]">หญิง:</span>
+                                    <span className="ml-1 font-bold text-pink-700">{totalFemale} คน</span>
+                                </div>
+                            </div>
+
+                            <div className="p-3">
+                                {workers.length === 0 ? (
+                                    <div className="text-center py-6 text-gray-400 italic text-xs bg-gray-50/50 rounded-lg border border-dashed border-gray-200">
+                                        ไม่มีทีมงานใน SWO นี้
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {workers.map((w: any) => {
+                                            const m = Number(w.male) || 0;
+                                            const f = Number(w.female) || 0;
+                                            const total = Number(w.actual_headcount) || 0;
+                                            const sumMF = m + f;
+                                            const isMismatch = total > 0 && sumMF > 0 && sumMF !== total;
+
+                                            return (
+                                                <div 
+                                                    key={w.id} 
+                                                    className={`p-2.5 rounded-lg border transition-all space-y-1.5 ${
+                                                        isMismatch ? 'bg-amber-50/70 border-amber-300' : 'bg-gray-50/60 hover:bg-gray-50 border-gray-200/70'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center justify-between gap-1">
+                                                        <div className="font-bold text-gray-900 text-xs truncate">
+                                                            {w.name}
+                                                        </div>
+                                                        {isMismatch && (
+                                                            <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-1 py-0.2 rounded shrink-0">
+                                                                ⚠️ รวมไม่ตรง ({sumMF} ≠ {total})
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        <div>
+                                                            <label className="block text-[10px] text-gray-500 mb-0.5">รวม (คน)</label>
+                                                            <input 
+                                                                type="number" 
+                                                                placeholder="0" 
+                                                                disabled={isReadOnly} 
+                                                                value={w.actual_headcount ?? ''} 
+                                                                onChange={(evt) => setWorkers(workers.map((wk: any) => wk.id === w.id ? { ...wk, actual_headcount: Number(evt.target.value) } : wk))} 
+                                                                className={`w-full py-1 px-2 border rounded-md text-xs font-bold text-center outline-none ${
+                                                                    isReadOnly ? 'bg-gray-100 cursor-not-allowed text-gray-500 border-gray-200' : 'bg-white border-gray-300 focus:ring-1 focus:ring-indigo-500'
+                                                                }`} 
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] text-blue-600 mb-0.5">ชาย (คน)</label>
+                                                            <input 
+                                                                type="number" 
+                                                                placeholder="0" 
+                                                                disabled={isReadOnly} 
+                                                                value={w.male ?? ''} 
+                                                                onChange={(evt) => setWorkers(workers.map((wk: any) => wk.id === w.id ? { ...wk, male: Number(evt.target.value) } : wk))} 
+                                                                className={`w-full py-1 px-2 border rounded-md text-xs font-semibold text-center outline-none ${
+                                                                    isReadOnly ? 'bg-gray-100 cursor-not-allowed text-gray-500 border-gray-200' : 'bg-white border-blue-200 focus:ring-1 focus:ring-blue-500'
+                                                                }`} 
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] text-pink-600 mb-0.5">หญิง (คน)</label>
+                                                            <input 
+                                                                type="number" 
+                                                                placeholder="0" 
+                                                                disabled={isReadOnly} 
+                                                                value={w.female ?? ''} 
+                                                                onChange={(evt) => setWorkers(workers.map((wk: any) => wk.id === w.id ? { ...wk, female: Number(evt.target.value) } : wk))} 
+                                                                className={`w-full py-1 px-2 border rounded-md text-xs font-semibold text-center outline-none ${
+                                                                    isReadOnly ? 'bg-gray-100 cursor-not-allowed text-gray-500 border-gray-200' : 'bg-white border-pink-200 focus:ring-1 focus:ring-pink-500'
+                                                                }`} 
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })()}
+            </div>
+
+            {/* 2-Column Split: Notes & Remarks (Left 1/2) & Photos/Attachments (Right 1/2) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 items-stretch w-full min-w-0">
+                {/* Notes & Remarks Card */}
+                <div className="bg-white rounded-xl shadow-xs border border-gray-200/90 overflow-hidden flex flex-col">
+                    <div className="px-3.5 py-2 bg-gray-50/80 border-b border-gray-200 flex items-center gap-1.5">
+                        <MessageSquare className="w-3.5 h-3.5 text-gray-600" />
+                        <h3 className="text-xs sm:text-sm font-bold text-gray-900">Daily Report Notes & Remarks</h3>
+                    </div>
+                    <div className="p-3 flex-1 flex flex-col">
+                        <textarea
+                            rows={3}
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            disabled={isReadOnly}
+                            placeholder={isReadOnly ? "ไม่มีข้อความหมายเหตุสำหรับวันนี้" : "ระบุรายละเอียดเพิ่มเติม ปัญหา อุปสรรคหน้างาน สภาพอากาศ หรือข้อสังเกต..."}
+                            className={`w-full flex-1 p-2.5 border rounded-lg text-xs sm:text-sm outline-none transition-all resize-none ${
+                                isReadOnly ? 'bg-gray-50 cursor-not-allowed text-gray-500 border-gray-200' : 'bg-white border-gray-300 focus:ring-1 focus:ring-blue-500 shadow-2xs'
+                            }`}
+                        />
+                        <p className="text-[10px] text-gray-400 mt-1 text-right">
+                            {notes.length} ตัวอักษร
+                        </p>
+                    </div>
+                </div>
+
+                {/* Upload Photos & Attachments Card */}
+                <div className="bg-white rounded-xl shadow-xs border border-gray-200/90 overflow-hidden flex flex-col">
+                    <div className="px-3.5 py-2 bg-gray-50/80 border-b border-gray-200 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                            <Camera className="w-3.5 h-3.5 text-gray-600" />
+                            <h3 className="text-xs sm:text-sm font-bold text-gray-900">Site Photos & Attachments</h3>
+                        </div>
+                        {(existingReport?.attachments || []).length > 0 && (
+                            <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                                {existingReport.attachments.length} ไฟล์
+                            </span>
+                        )}
+                    </div>
+                    <div className="p-3 flex-1 flex flex-col justify-between space-y-2">
+                        {!isReadOnly && (
+                            <div>
+                                <div className="border border-dashed border-gray-300 hover:border-blue-400 rounded-lg p-2.5 text-center transition-colors bg-gray-50/50">
+                                    <input
+                                        type="file"
+                                        multiple
+                                        accept="image/*,.pdf,.doc,.docx"
+                                        onChange={(e) => setFiles(e.target.files)}
+                                        disabled={uploading}
+                                        id="daily-report-file-input"
+                                        className="hidden"
+                                    />
+                                    <label htmlFor="daily-report-file-input" className="cursor-pointer flex flex-col items-center gap-1">
+                                        <div className="w-7 h-7 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                                            <Camera className="w-3.5 h-3.5" />
+                                        </div>
+                                        <span className="text-xs font-semibold text-blue-600 hover:underline">
+                                            คลิกเพื่อเลือกไฟล์รูปภาพ หรือเอกสาร
+                                        </span>
+                                        <span className="text-[10px] text-gray-400">
+                                            รองรับ JPG, PNG, PDF (เลือกได้หลายไฟล์)
+                                        </span>
+                                    </label>
+                                </div>
+                                {files && files.length > 0 && (
+                                    <div className="mt-1.5 flex items-center justify-between bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
+                                        <span className="text-[11px] font-medium text-emerald-800">
+                                            📁 เลือกแล้ว {files.length} ไฟล์
+                                        </span>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setFiles(null)}
+                                            className="text-[11px] text-rose-600 hover:underline cursor-pointer"
+                                        >
+                                            ยกเลิก
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Existing Attachments Thumbnails Grid */}
+                        {(existingReport?.attachments || []).length > 0 ? (
+                            <div className="space-y-1.5">
+                                <p className="text-[11px] font-semibold text-gray-600">รูปภาพและเอกสารในรายงานนี้:</p>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-36 overflow-y-auto p-0.5">
+                                    {(existingReport.attachments as { name: string; url: string; type: string }[]).map((att, i) =>
+                                        att.type?.startsWith('image/') ? (
+                                            <button
+                                                key={i}
+                                                type="button"
+                                                onClick={() => setLightboxImage({ url: att.url, name: att.name })}
+                                                className="group relative rounded-lg overflow-hidden border border-gray-200 bg-white hover:shadow-sm transition-all text-left cursor-pointer"
+                                            >
+                                                <div className="aspect-[4/3] bg-gray-100 overflow-hidden">
+                                                    <img
+                                                        src={att.url}
+                                                        alt={att.name}
+                                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                    />
+                                                </div>
+                                                <p className="px-1.5 py-0.5 text-[9px] text-gray-600 truncate bg-white border-t border-gray-100">
+                                                    {att.name}
+                                                </p>
+                                            </button>
+                                        ) : (
+                                            <a
+                                                key={i}
+                                                href={att.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-1.5 p-1.5 rounded-lg border border-gray-200 bg-white hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+                                            >
+                                                <span className="text-base">📄</span>
+                                                <span className="text-[11px] text-blue-700 font-medium truncate hover:underline">
+                                                    {att.name}
+                                                </span>
+                                            </a>
+                                        )
+                                    )}
+                                </div>
+                            </div>
+                        ) : isReadOnly ? (
+                            <div className="text-center py-4 text-gray-400 italic text-xs bg-gray-50/50 rounded-lg">
+                                ไม่มีรูปภาพหรือไฟล์แนบในรายงานนี้
+                            </div>
+                        ) : null}
                     </div>
                 </div>
             </div>
 
-            {!isReadOnly && (
-                <div className="flex flex-col-reverse sm:flex-row justify-end gap-4 pt-4">
-                    <button className="w-full sm:w-auto px-6 py-2 border border-gray-300 text-gray-700 bg-white rounded-xl hover:bg-gray-50 font-medium shadow-sm flex justify-center items-center" disabled={uploading}>
-                        <Save className="w-4 h-4 mr-2" /> Save Draft
-                    </button>
-                    <button className="w-full sm:w-auto px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium shadow-sm flex justify-center items-center disabled:opacity-60 disabled:cursor-not-allowed" onClick={handleSubmit} disabled={uploading}>
-                        {uploading ? (
-                            <><svg className="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>Uploading...</>
-                        ) : (
-                            <><Send className="w-4 h-4 mr-2" />{existingReport?.status === 'Rejected' ? 'Resubmit for Approval' : 'Submit for Approval'}</>
-                        )}
-                    </button>
+            {/* Bottom Action Bar (Slim & Compact) */}
+            <div className="sticky bottom-3 z-20 bg-white/95 backdrop-blur-md p-2.5 px-4 rounded-xl border border-gray-200 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2 text-xs">
+                    <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0"></span>
+                    <span className="text-gray-600">
+                        วันที่: <span className="font-bold text-gray-900">{selectedDate}</span>
+                    </span>
+                    <span className="text-gray-300">•</span>
+                    <span className="text-gray-600">
+                        สถานะ: <span className="font-semibold text-gray-800">
+                            {reportStatus === 'none' ? 'ยังไม่ได้ส่งรายงาน' : reportStatus}
+                        </span>
+                    </span>
                 </div>
-            )}
+
+                {isEditable ? (
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <button
+                            type="button"
+                            onClick={handleSaveDraft}
+                            disabled={uploading}
+                            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-semibold text-xs rounded-lg shadow-2xs transition-all disabled:opacity-50 cursor-pointer"
+                        >
+                            <Save className="w-3.5 h-3.5 text-gray-500" />
+                            <span>บันทึกแบบร่าง (Draft)</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleSubmit}
+                            disabled={uploading}
+                            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+                        >
+                            {uploading ? (
+                                <>
+                                    <svg className="animate-spin -ml-1 mr-1 h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                                    </svg>
+                                    <span>กำลังส่ง...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Send className="w-3.5 h-3.5" />
+                                    <span>{existingReport?.status === 'Rejected' ? 'Resubmit for Approval (ส่งซ้ำ)' : 'Submit for Approval (ส่งขออนุมัติ)'}</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
+                ) : (
+                    <div className="text-xs text-gray-500 italic">
+                        โหมดอ่านอย่างเดียว – ไม่สามารถแก้ไขข้อมูลได้
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
@@ -1883,7 +2357,7 @@ export const ApprovalDashboard = () => {
         const q = query(col("swo_change_requests"));
         const unsub = onSnapshot(q, (snapshot) => {
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            const filtered = (isAdminLike || user?.role === 'MD')
+            const filtered = (isAdminLike || user?.role === 'MD' || isViewer(user?.role))
                 ? fetched.filter((r: any) => activeProjectIds.has(r.project_id))
                 : fetched.filter((r: any) => activeProjectIds.has(r.project_id) && (user as any)?.assigned_projects?.includes(r.project_id));
             setChangeRequests(filtered);
@@ -1922,7 +2396,7 @@ export const ApprovalDashboard = () => {
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
             // RBAC: Admin/MD see all reports; all other roles see only reports from their assigned projects
-            const filtered = (isAdminLike || user?.role === 'MD')
+            const filtered = (isAdminLike || user?.role === 'MD' || isViewer(user?.role))
                 ? fetched.filter((r: any) => activeProjectIds.has((r as any).project_id))
                 : fetched.filter((r: any) => activeProjectIds.has((r as any).project_id) && (user as any)?.assigned_projects?.includes((r as any).project_id));
 
@@ -2148,7 +2622,7 @@ export const ApprovalDashboard = () => {
         );
 
     return (
-        <div className="flex flex-col lg:flex-row min-h-[calc(100vh-8rem)] lg:h-[calc(100vh-8rem)] gap-4 lg:gap-6 pb-6 lg:pb-12">
+        <div className="flex flex-col lg:flex-row min-h-[calc(100vh-8rem)] lg:h-[calc(100vh-8rem)] gap-3.5 pb-6 lg:pb-10 max-w-7xl mx-auto">
             <AlertModal {...approvalModalProps} />
 
             {/* Reject Reason Modal */}
@@ -2194,7 +2668,7 @@ export const ApprovalDashboard = () => {
             )}
 
             {/* List / Inbox: with tabs and filters */}
-            <div className="w-full max-h-[55vh] lg:max-h-none lg:w-96 lg:flex-shrink-0 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-0">
+            <div className="w-full max-h-[55vh] lg:max-h-none lg:w-80 xl:w-88 lg:flex-shrink-0 bg-white rounded-xl border border-gray-200/90 shadow-xs overflow-hidden flex flex-col min-h-0">
                 {/* Section: Daily Reports | Change Requests */}
                 <div className="flex border-b border-gray-200 bg-gray-50 shrink-0">
                     <button
@@ -2410,7 +2884,7 @@ export const ApprovalDashboard = () => {
             </div>
 
             {/* Review Pane */}
-            <div className="flex-1 min-h-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="flex-1 min-h-0 bg-white rounded-xl border border-gray-200/90 shadow-xs overflow-hidden flex flex-col min-w-0 w-full">
                 {inboxSection === 'changes' ? (
                     selectedChangeRequest ? (
                         <>
@@ -2424,7 +2898,7 @@ export const ApprovalDashboard = () => {
                             <div className="p-6 flex-1 overflow-y-auto space-y-6">
                                 <div className="rounded-xl border border-gray-200 overflow-hidden">
                                     <div className="px-4 py-3 bg-gray-50 border-b font-semibold text-gray-800 text-sm">C1 Draft (ปริมาณ/ราคา)</div>
-                                    <div className="overflow-x-auto">
+                                    <div className="overflow-x-auto w-full min-w-0">
                                         <table className="w-full text-sm text-left">
                                             <thead className="bg-white border-b"><tr><th className="px-4 py-2">Description</th><th className="px-4 py-2">Qty</th><th className="px-4 py-2">Unit</th><th className="px-4 py-2">Rate</th></tr></thead>
                                             <tbody className="divide-y">
@@ -2451,30 +2925,30 @@ export const ApprovalDashboard = () => {
 
                     return (
                         <>
-                            <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50">
+                            <div className="p-3.5 sm:p-4 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5 bg-slate-50/70">
                                 <div>
-                                    <h2 className="text-xl font-bold text-gray-900">Review Report: {report.swo}</h2>
-                                    <p className="text-sm text-gray-500">{report.date} | By {report.supervisor}</p>
+                                    <h2 className="text-base sm:text-lg font-bold text-gray-900">Review Report: {report.swo}</h2>
+                                    <p className="text-xs sm:text-sm text-gray-500">{report.date} | By {report.supervisor}</p>
                                 </div>
                                 <StatusBadge status={report.status} />
                             </div>
 
-                            <div className="p-6 flex-1 overflow-y-auto space-y-6">
+                            <div className="p-3.5 sm:p-4 flex-1 overflow-y-auto space-y-3.5">
                                 {/* C1: Work Activities */}
-                                <div className="rounded-xl border border-gray-200 overflow-hidden">
-                                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 font-semibold text-gray-800 text-sm">
+                                <div className="rounded-xl border border-gray-200/90 overflow-hidden">
+                                    <div className="px-3.5 py-2 bg-gray-50/80 border-b border-gray-100 font-semibold text-gray-800 text-xs sm:text-sm">
                                         Work Activities (C1)
                                     </div>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm text-left text-gray-600">
-                                            <thead className="bg-white text-gray-500 italic border-b border-gray-100">
+                                    <div className="overflow-x-auto w-full min-w-0">
+                                        <table className="w-full text-xs text-left text-gray-600">
+                                            <thead className="bg-slate-50 text-gray-600 font-medium border-b border-gray-100">
                                                 <tr>
-                                                    <th className="px-4 py-2 font-medium">Description</th>
-                                                    <th className="px-4 py-2 font-medium">Qty Required</th>
-                                                    <th className="px-4 py-2 font-medium">Prev Total</th>
-                                                    <th className="px-4 py-2 font-medium text-blue-600 bg-blue-50/30">Today's Progress</th>
-                                                    <th className="px-4 py-2 font-medium text-right">Up to Date</th>
-                                                    <th className="px-4 py-2 font-medium text-right">% Complete</th>
+                                                    <th className="px-3 py-1.5 font-semibold">Description</th>
+                                                    <th className="px-3 py-1.5 font-semibold">Qty Required</th>
+                                                    <th className="px-3 py-1.5 font-semibold">Prev Total</th>
+                                                    <th className="px-3 py-1.5 font-semibold text-blue-600 bg-blue-50/40">Today's Progress</th>
+                                                    <th className="px-3 py-1.5 font-semibold text-right">Up to Date</th>
+                                                    <th className="px-3 py-1.5 font-semibold text-right">% Complete</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100">
@@ -2484,17 +2958,17 @@ export const ApprovalDashboard = () => {
                                                     const upToDate = Math.min(total, rawUpToDate);
                                                     const percent = total > 0 ? Math.min(100, (upToDate / total) * 100).toFixed(1) : '0.0';
                                                     return (
-                                                        <tr key={i} className="hover:bg-gray-50">
-                                                            <td className="px-4 py-3 font-medium text-gray-800">{a.desc || a.description || '-'}</td>
-                                                            <td className="px-4 py-3">{a.total} {a.unit}</td>
-                                                            <td className="px-4 py-3 text-gray-500">{formatProgressValue(a.prev_total)} {a.unit}</td>
-                                                            <td className="px-4 py-3 bg-blue-50/10">
-                                                                <span className="w-24 inline-block text-right font-bold text-blue-700">{a.today || 0}</span>
-                                                                <span className="text-xs text-gray-500 ml-1">{a.unit}</span>
+                                                        <tr key={i} className="hover:bg-gray-50/80">
+                                                            <td className="px-3 py-1.5 font-medium text-gray-800">{a.desc || a.description || '-'}</td>
+                                                            <td className="px-3 py-1.5">{a.total} {a.unit}</td>
+                                                            <td className="px-3 py-1.5 text-gray-500">{formatProgressValue(a.prev_total)} {a.unit}</td>
+                                                            <td className="px-3 py-1.5 bg-blue-50/20">
+                                                                <span className="w-20 inline-block text-right font-bold text-blue-700">{a.today || 0}</span>
+                                                                <span className="text-[10px] text-gray-500 ml-1">{a.unit}</span>
                                                             </td>
-                                                            <td className="px-4 py-3 text-right font-semibold text-gray-800">{formatProgressValue(upToDate)} {a.unit}</td>
-                                                            <td className="px-4 py-3 text-right">
-                                                                <span className={`px-2 py-1 rounded text-xs font-bold ${parseFloat(percent) >= 100 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                                                            <td className="px-3 py-1.5 text-right font-semibold text-gray-800">{formatProgressValue(upToDate)} {a.unit}</td>
+                                                            <td className="px-3 py-1.5 text-right">
+                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${parseFloat(percent) >= 100 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
                                                                     {percent}%
                                                                 </span>
                                                             </td>
@@ -2502,61 +2976,64 @@ export const ApprovalDashboard = () => {
                                                     );
                                                 })}
                                                 {!(report.activities || []).length && (
-                                                    <tr><td colSpan={6} className="px-4 py-4 text-center text-gray-400 italic">No activities recorded</td></tr>
+                                                    <tr><td colSpan={6} className="px-3 py-3 text-center text-gray-400 italic text-xs">No activities recorded</td></tr>
                                                 )}
                                             </tbody>
                                         </table>
                                     </div>
                                 </div>
 
-                                {/* C2: Equipment Usage */}
-                                <div className="rounded-xl border border-orange-100 overflow-hidden">
-                                    <div className="px-4 py-3 bg-orange-50 border-b border-orange-100 font-semibold text-orange-800 text-sm">
-                                        Equipment Usage (C2)
+                                {/* C2: Equipment Usage & C3: Worker Headcount - Split Layout */}
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 items-start w-full min-w-0">
+                                    {/* C2: Equipment Usage */}
+                                    <div className="rounded-xl border border-orange-200/80 overflow-hidden bg-slate-50/40">
+                                        <div className="px-3.5 py-2 bg-orange-50 border-b border-orange-100 font-semibold text-orange-800 text-xs sm:text-sm">
+                                            Equipment Usage (C2)
+                                        </div>
+                                        <div className="p-2.5 sm:p-3 grid gap-2">
+                                            {(report.equipments || []).map((e: any, i: number) => (
+                                                <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center bg-white p-2.5 rounded-lg border border-gray-100 text-xs shadow-xs">
+                                                    <div className="w-full sm:w-1/3 font-medium text-gray-800 truncate">{e.name || e.equipment_id || '-'}</div>
+                                                    <span className="px-1.5 py-0.5 bg-gray-50 border border-gray-200 rounded text-gray-700 text-[10px] font-semibold">{e.status || 'Working'}</span>
+                                                    <div className="flex-1 text-gray-600 truncate">{e.work_detail || <span className="italic text-gray-400">No detail</span>}</div>
+                                                    <div className="text-gray-700 font-semibold whitespace-nowrap">{e.hours || 0} <span className="text-[10px] font-normal text-gray-500">hrs</span></div>
+                                                </div>
+                                            ))}
+                                            {!(report.equipments || []).length && (
+                                                <p className="text-center text-gray-400 italic text-xs py-2">No equipment recorded</p>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="p-4 grid gap-3">
-                                        {(report.equipments || []).map((e: any, i: number) => (
-                                            <div key={i} className="flex flex-col md:flex-row gap-3 items-start md:items-center bg-gray-50 p-3 rounded-lg border border-gray-100 text-sm">
-                                                <div className="w-full md:w-1/4 font-medium text-gray-800">{e.name || e.equipment_id || '-'}</div>
-                                                <span className="px-2 py-1 bg-white border border-gray-200 rounded text-gray-700 text-xs font-semibold">{e.status || 'Working'}</span>
-                                                <div className="flex-1 text-gray-600">{e.work_detail || <span className="italic text-gray-400">No detail</span>}</div>
-                                                <div className="text-gray-700 font-semibold">{e.hours || 0} <span className="text-xs font-normal text-gray-500">hrs</span></div>
-                                            </div>
-                                        ))}
-                                        {!(report.equipments || []).length && (
-                                            <p className="text-center text-gray-400 italic text-sm py-2">No equipment recorded</p>
-                                        )}
-                                    </div>
-                                </div>
 
-                                {/* C3: Worker Headcount */}
-                                <div className="rounded-xl border border-indigo-100 overflow-hidden">
-                                    <div className="px-4 py-3 bg-indigo-50 border-b border-indigo-100 font-semibold text-indigo-800 text-sm">
-                                        Worker Headcount (C3)
-                                    </div>
-                                    <div className="p-4 grid gap-3">
-                                        {(report.workers || []).map((w: any, i: number) => (
-                                            <div key={i} className="flex flex-col md:flex-row gap-3 items-start md:items-center bg-gray-50 p-3 rounded-lg border border-gray-100 text-sm">
-                                                <div className="w-full md:w-1/3 font-medium text-gray-800">{w.name || w.team_id || '-'}</div>
-                                                <div className="flex gap-6">
-                                                    <div className="text-center">
-                                                        <p className="text-xs text-gray-500 mb-0.5">Total</p>
-                                                        <p className="font-bold text-gray-800">{w.actual_headcount || 0}</p>
-                                                    </div>
-                                                    <div className="text-center">
-                                                        <p className="text-xs text-blue-500 mb-0.5">Male</p>
-                                                        <p className="font-bold text-blue-700">{w.male || 0}</p>
-                                                    </div>
-                                                    <div className="text-center">
-                                                        <p className="text-xs text-pink-500 mb-0.5">Female</p>
-                                                        <p className="font-bold text-pink-700">{w.female || 0}</p>
+                                    {/* C3: Worker Headcount */}
+                                    <div className="rounded-xl border border-indigo-200/80 overflow-hidden bg-slate-50/40">
+                                        <div className="px-3.5 py-2 bg-indigo-50 border-b border-indigo-100 font-semibold text-indigo-800 text-xs sm:text-sm">
+                                            Worker Headcount (C3)
+                                        </div>
+                                        <div className="p-2.5 sm:p-3 grid gap-2">
+                                            {(report.workers || []).map((w: any, i: number) => (
+                                                <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center bg-white p-2.5 rounded-lg border border-gray-100 text-xs shadow-xs">
+                                                    <div className="w-full sm:w-2/5 font-medium text-gray-800 truncate">{w.name || w.team_id || '-'}</div>
+                                                    <div className="flex gap-4 sm:ml-auto">
+                                                        <div className="text-center">
+                                                            <p className="text-[10px] text-gray-500">Total</p>
+                                                            <p className="font-bold text-gray-800 text-xs">{w.actual_headcount || 0}</p>
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <p className="text-[10px] text-blue-500">Male</p>
+                                                            <p className="font-bold text-blue-700 text-xs">{w.male || 0}</p>
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <p className="text-[10px] text-pink-500">Female</p>
+                                                            <p className="font-bold text-pink-700 text-xs">{w.female || 0}</p>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
-                                        {!(report.workers || []).length && (
-                                            <p className="text-center text-gray-400 italic text-sm py-2">No workers recorded</p>
-                                        )}
+                                            ))}
+                                            {!(report.workers || []).length && (
+                                                <p className="text-center text-gray-400 italic text-xs py-2">No workers recorded</p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -2625,13 +3102,13 @@ export const ApprovalDashboard = () => {
                                 {/* Review Notes input - only show when can act */}
                                 {canActOnReport(report) && (
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                                            <MessageSquare className="w-4 h-4 mr-1 text-gray-400" />
+                                        <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 flex items-center">
+                                            <MessageSquare className="w-3.5 h-3.5 mr-1 text-gray-400" />
                                             {report.status === 'Pending CM' ? 'CM Review Notes' : 'PM Review Notes'}
                                         </label>
                                         <textarea
-                                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                                            rows={4}
+                                            className="w-full p-2.5 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                            rows={2}
                                             placeholder={report.status === 'Pending CM' 
                                                 ? "Add CM comments before approving/rejecting..." 
                                                 : "Add PM comments before final approval/rejection..."}
@@ -2642,20 +3119,20 @@ export const ApprovalDashboard = () => {
                                 )}
                             </div>
 
-                            <div className="p-4 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-3 mt-auto">
+                            <div className="p-3 sm:p-3.5 border-t border-gray-100 bg-gray-50/80 flex flex-col sm:flex-row justify-between items-center gap-2 mt-auto">
                                 {/* Approval flow hint */}
-                                <div className="text-xs text-gray-400">
+                                <div className="text-xs text-gray-500">
                                     {report.status === 'Pending CM' && <span>⏳ รอ CM อนุมัติ → ส่งต่อ PM</span>}
                                     {report.status === 'Pending PM' && <span>⏳ รอ PM อนุมัติขั้นสุดท้าย</span>}
-                                    {report.status === 'Approved' && <span className="text-green-600">✅ อนุมัติแล้ว</span>}
-                                    {report.status === 'Rejected' && <span className="text-red-500">❌ ถูก Reject</span>}
+                                    {report.status === 'Approved' && <span className="text-green-600 font-medium">✅ อนุมัติแล้ว</span>}
+                                    {report.status === 'Rejected' && <span className="text-red-500 font-medium">❌ ถูก Reject</span>}
                                 </div>
                                 {canActOnReport(report) ? (
-                                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                                        <button onClick={() => openRejectModal(report)} className="w-full sm:w-auto px-5 py-2.5 border-2 border-red-200 text-red-700 bg-red-50 hover:bg-red-100 rounded-xl font-bold transition-colors">
+                                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                                        <button onClick={() => openRejectModal(report)} className="w-full sm:w-auto px-3.5 py-1.5 border-2 border-red-200 text-red-700 bg-red-50 hover:bg-red-100 rounded-lg font-semibold text-xs sm:text-sm transition-colors">
                                             ❌ Reject
                                         </button>
-                                        <button onClick={() => handleApprove(report)} className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold shadow-sm transition-colors text-white ${report.status === 'Pending CM' && (user?.role === 'PM' || isAdminLike) ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}>
+                                        <button onClick={() => handleApprove(report)} className={`w-full sm:w-auto px-4 py-1.5 rounded-lg font-semibold text-xs sm:text-sm shadow-xs transition-colors text-white ${report.status === 'Pending CM' && (user?.role === 'PM' || isAdminLike) ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}>
                                             {getApproveLabel(report)}
                                         </button>
                                     </div>

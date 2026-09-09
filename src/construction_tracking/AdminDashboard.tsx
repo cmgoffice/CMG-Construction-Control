@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { col, docRef, logActivity, masterDb } from './firebase';
 
@@ -26,6 +27,7 @@ export const AdminDashboard = () => {
     const [users, setUsers] = useState<AppUser[]>([]);
 
     const [editingUser, setEditingUser] = useState<string | null>(null);
+    const [openProjectMenu, setOpenProjectMenu] = useState<{ userId: string; top: number; left: number } | null>(null);
 
     const [editForm, setEditForm] = useState<{ firstName: string; lastName: string; position: string; assigned_projects: string[] }>({ firstName: '', lastName: '', position: '', assigned_projects: [] });
 
@@ -249,6 +251,7 @@ export const AdminDashboard = () => {
 
     const startEdit = (u: AppUser) => {
 
+        setOpenProjectMenu(null);
         setEditingUser(u.uid);
 
         setEditForm({ firstName: u.firstName, lastName: u.lastName, position: u.position || '', assigned_projects: u.assigned_projects || [] });
@@ -260,6 +263,7 @@ export const AdminDashboard = () => {
     const cancelEdit = () => {
 
         setEditingUser(null);
+        setOpenProjectMenu(null);
 
         setEditForm({ firstName: '', lastName: '', position: '', assigned_projects: [] });
 
@@ -284,6 +288,7 @@ export const AdminDashboard = () => {
             });
 
             setEditingUser(null);
+            setOpenProjectMenu(null);
 
             showAlert('success', 'อัปเดตสำเร็จ', 'ข้อมูลผู้ใช้งานได้รับการอัปเดตแล้ว');
 
@@ -526,7 +531,7 @@ export const AdminDashboard = () => {
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     <div className="overflow-x-auto">
 
-                    <table className="w-full text-left text-sm">
+                    <table className="w-full min-w-max text-left text-sm">
 
                         <thead className="bg-gray-50 text-gray-700 font-medium border-b border-gray-200">
 
@@ -554,7 +559,7 @@ export const AdminDashboard = () => {
 
                             {sortedUsers.map((u) => (
 
-                                <tr key={u.uid} className={`hover:bg-gray-50/50 transition-colors ${u.status === 'Pending' ? 'bg-amber-50/30' : ''}`}>
+                                <tr key={u.uid} className={`whitespace-nowrap hover:bg-gray-50/50 transition-colors ${u.status === 'Pending' ? 'bg-amber-50/30' : ''}`}>
 
                                     {/* Name */}
 
@@ -732,69 +737,89 @@ export const AdminDashboard = () => {
 
                                     {/* Projects Assigment */}
 
-                                    <td className="px-3 py-1.5 min-w-[180px]">
+                                    <td className="px-3 py-1.5 w-[170px]">
+                                        {(() => {
+                                            const selectedProjects = editingUser === u.uid
+                                                ? editForm.assigned_projects
+                                                : (u.assigned_projects || []);
+                                            const isOpen = openProjectMenu?.userId === u.uid;
 
-                                        {editingUser === u.uid ? (
+                                            return (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(event) => {
+                                                            if (isOpen) {
+                                                                setOpenProjectMenu(null);
+                                                                return;
+                                                            }
+                                                            const rect = event.currentTarget.getBoundingClientRect();
+                                                            const menuWidth = 288;
+                                                            const menuHeight = 320;
+                                                            setOpenProjectMenu({
+                                                                userId: u.uid,
+                                                                top: rect.bottom + menuHeight > window.innerHeight
+                                                                    ? Math.max(12, rect.top - menuHeight - 6)
+                                                                    : rect.bottom + 6,
+                                                                left: Math.min(rect.left, window.innerWidth - menuWidth - 12)
+                                                            });
+                                                        }}
+                                                        className={`inline-flex w-[150px] items-center justify-between rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${editingUser === u.uid
+                                                            ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                                                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                                                        }`}
+                                                        aria-haspopup="menu"
+                                                        aria-expanded={isOpen}
+                                                    >
+                                                        <span>{selectedProjects.length} Projects</span>
+                                                        <span className={`ml-2 text-[10px] transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+                                                    </button>
 
-                                            <div className="flex flex-col gap-1 max-h-32 overflow-y-auto border border-blue-200 rounded p-1 bg-white">
-
-                                                {projects.length === 0 && <span className="text-xs text-gray-400">No projects available</span>}
-
-                                                {projects.map(p => (
-
-                                                    <label key={p.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-blue-50 p-1 rounded">
-
-                                                        <input
-
-                                                            type="checkbox"
-
-                                                            checked={editForm.assigned_projects.includes(p.id)}
-
-                                                            onChange={() => toggleProjectAssignment(p.id)}
-
-                                                            className="rounded text-blue-600 focus:ring-blue-500"
-
-                                                        />
-
-                                                        <span className="truncate" title={p.name}>{p.no}</span>
-
-                                                    </label>
-
-                                                ))}
-
-                                            </div>
-
-                                        ) : (
-
-                                            <div className="flex flex-wrap gap-1 max-w-[250px]">
-
-                                                {u.assigned_projects && u.assigned_projects.length > 0 ? (
-
-                                                    u.assigned_projects.map(pid => {
-
-                                                        const p = projects.find(proj => proj.id === pid);
-
-                                                        return p ? (
-
-                                                            <span key={pid} className="px-2 py-0.5 bg-blue-100 text-blue-800 text-[10px] rounded-full border border-blue-200 truncate max-w-[120px]" title={p.name}>
-
-                                                                {p.no}
-
-                                                            </span>
-
-                                                        ) : null;
-
-                                                    })
-
-                                                ) : (
-
-                                                    <span className="text-xs text-gray-400 italic">None</span>
-
-                                                )}
-
-                                            </div>
-
-                                        )}
+                                                    {isOpen && createPortal(
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                aria-label="Close project dropdown"
+                                                                className="fixed inset-0 z-[90] cursor-default"
+                                                                onClick={() => setOpenProjectMenu(null)}
+                                                            />
+                                                            <div
+                                                                className="fixed z-[100] w-72 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl"
+                                                                style={{ top: openProjectMenu.top, left: Math.max(12, openProjectMenu.left) }}
+                                                                role="menu"
+                                                            >
+                                                                <div className="border-b border-gray-100 px-3 py-2">
+                                                                    <p className="text-xs font-semibold text-gray-700">Assigned Projects ({selectedProjects.length})</p>
+                                                                    {editingUser !== u.uid && <p className="mt-0.5 text-[10px] text-gray-400">กด Edit เพื่อแก้ไขโปรเจกต์</p>}
+                                                                </div>
+                                                                <div className="max-h-64 overflow-y-auto p-2">
+                                                                    {projects.length === 0 && <span className="block px-2 py-3 text-xs text-gray-400">No projects available</span>}
+                                                                    {projects.map(p => (
+                                                                        <label
+                                                                            key={p.id}
+                                                                            className={`flex items-center gap-2 rounded-lg px-2 py-2 text-xs ${editingUser === u.uid ? 'cursor-pointer hover:bg-blue-50' : 'cursor-default'}`}
+                                                                        >
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={selectedProjects.includes(p.id)}
+                                                                                disabled={editingUser !== u.uid}
+                                                                                onChange={() => toggleProjectAssignment(p.id)}
+                                                                                className="rounded text-blue-600 focus:ring-blue-500 disabled:opacity-60"
+                                                                            />
+                                                                            <span className="min-w-0">
+                                                                                <span className="block truncate font-medium text-gray-700">{p.no}</span>
+                                                                                {p.name && <span className="block truncate text-[10px] text-gray-400">{p.name}</span>}
+                                                                            </span>
+                                                                        </label>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        </>,
+                                                        document.body
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
 
                                     </td>
 

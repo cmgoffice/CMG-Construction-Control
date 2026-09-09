@@ -1,6 +1,6 @@
 import React, { useState, ReactNode, useRef, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
-import { ShieldAlert, LogOut, Menu, UserCircle, Briefcase, FileText, BarChart3, Shield, User, Bell, BookOpen, ChevronLeft, ChevronRight, GitBranch } from 'lucide-react';
+import { ShieldAlert, LogOut, Menu, UserCircle, Briefcase, FileText, BarChart3, Shield, User, Bell, BookOpen, ChevronLeft, ChevronRight, GitBranch, Eye } from 'lucide-react';
 import { UserManualModal } from './UserManual';
 import { useNotifications, NotificationItem } from './useNotifications';
 
@@ -19,7 +19,7 @@ import ExecutiveDashboards from './ExecutiveDashboards';
 import SWOWorkflow from './SWOWorkflow';
 import { onSnapshot, query, updateDoc } from 'firebase/firestore';
 import { col, docRef, logActivity } from './firebase';
-import { canAccessAllProjects, canAccessAnalytics, canSeeApprovals, canUseSwoCreation, hasUniversalRoleAccess, isSystemAdmin } from './roleUtils';
+import { ALL_APP_ROLES, canSeeApprovals, canUseSwoCreation, canViewAnalytics, canViewApprovals, hasUniversalRoleAccess, isSystemAdmin, isViewer } from './roleUtils';
 
 // Wrapper: reads location.state to auto-edit a specific SWO
 const SWOCreationWrapper: React.FC = () => {
@@ -58,6 +58,9 @@ export const useAuth = () => {
       email: context.appUser.email,
       assigned_projects: context.appUser.assigned_projects || [],
     } : null,
+    actualRole: context.actualAppUser?.role || null,
+    previewRole: context.previewRole,
+    setPreviewRole: context.setPreviewRole,
     login: () => { }, // Cannot manually login like Mock anymore... handled via Form
     logout: context.logout
   };
@@ -76,9 +79,10 @@ const getDefaultPathForRole = (role: string): string => {
 interface ProtectedRouteProps {
   children: ReactNode;
   allowedRoles?: Role[];
+  viewerCanAccess?: boolean;
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles, viewerCanAccess = true }) => {
   const { user } = useAuth();
   const location = useLocation();
 
@@ -86,7 +90,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 
-  if (allowedRoles && !hasUniversalRoleAccess(user.role) && !allowedRoles.includes(user.role)) {
+  if (isViewer(user.role) && !viewerCanAccess) {
+    return <Navigate to={getDefaultPathForRole(user.role)} replace />;
+  }
+
+  if (allowedRoles && !isViewer(user.role) && !hasUniversalRoleAccess(user.role) && !allowedRoles.includes(user.role)) {
     return <Navigate to={getDefaultPathForRole(user.role)} replace />;
   }
 
@@ -163,7 +171,7 @@ const ClosureRejectedNotificationCard: React.FC<{
 const SIDEBAR_STORAGE_KEY = 'cmg-sidebar-collapsed';
 
 const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { user, logout } = useAuth();
+  const { user, actualRole, previewRole, setPreviewRole, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -388,7 +396,7 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
             <span className={sidebarCollapsed ? 'md:hidden' : ''}>Daily Report</span>
           </Link>
 
-          {canSeeApprovals(user?.role) && (
+          {canViewApprovals(user?.role) && (
             <Link to="/approvals" className={`${navLinkClass('/approvals')} relative`} title="Approvals">
               <span className="relative inline-flex">
                 <ShieldAlert className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
@@ -420,7 +428,7 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
             )}
           </Link>
 
-          {canAccessAnalytics(user?.role) && (
+          {canViewAnalytics(user?.role) && (
             <Link to="/analytics" className={navLinkClass('/analytics')} title="Analytics">
               <BarChart3 className="w-5 h-5 flex-shrink-0 md:mr-0 mr-3" />
               <span className={sidebarCollapsed ? 'md:hidden' : ''}>Analytics</span>
@@ -473,7 +481,7 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-30 flex items-center justify-between px-6 py-4">
+        <header className="bg-white border-b border-gray-200 sticky top-0 z-30 flex items-center justify-between px-3 sm:px-6 py-2.5 sm:py-4">
           <button className="md:hidden text-gray-500 hover:text-gray-700" onClick={() => setIsMobileMenuOpen(true)}>
             <Menu className="w-6 h-6" />
           </button>
@@ -481,6 +489,34 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
           <div className="flex-1"></div>
 
           <div className="flex items-center gap-3">
+
+            {/* Admin-only role preview. It changes UI/RBAC checks, not the account's saved role. */}
+            {isSystemAdmin(actualRole) && (
+              <div className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 ${previewRole ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}>
+                <Eye className={`w-4 h-4 shrink-0 ${previewRole ? 'text-amber-600' : 'text-gray-400'}`} />
+                <label htmlFor="role-preview" className="hidden lg:block text-xs font-medium text-gray-600 whitespace-nowrap">
+                  มุมมอง Role
+                </label>
+                <select
+                  id="role-preview"
+                  value={previewRole || ''}
+                  onChange={(event) => {
+                    const nextRole = event.target.value as Role | '';
+                    setPreviewRole(nextRole || null);
+                    navigate(getDefaultPathForRole(nextRole || actualRole || 'Admin'));
+                    setBellOpen(false);
+                  }}
+                  className="max-w-[132px] sm:max-w-none bg-transparent text-xs sm:text-sm font-semibold text-gray-800 outline-none cursor-pointer"
+                  title="จำลองเมนู ปุ่ม และสิทธิ์ตาม Role โดยไม่เปลี่ยน Role จริงของบัญชี"
+                  aria-label="เลือกมุมมองตาม Role"
+                >
+                  <option value="">Role จริง ({actualRole})</option>
+                  {ALL_APP_ROLES.map(role => (
+                    <option key={role} value={role}>มุมมอง {role}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* User Manual Button */}
             <button
@@ -508,7 +544,7 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
 
               {/* Dropdown */}
               {bellOpen && (
-                <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
+                <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-sm sm:max-w-md bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
                   <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
                     <div className="flex items-center gap-2">
                       <Bell className="w-4 h-4 text-gray-600" />
@@ -595,7 +631,9 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
               <UserCircle className="w-8 h-8 text-gray-400" />
               <div className="hidden sm:block text-right">
                 <p className="font-medium text-gray-900 leading-tight">{user?.name}</p>
-                <p className="text-xs text-gray-500">{user?.role}</p>
+                <p className={`text-xs ${previewRole ? 'font-semibold text-amber-600' : 'text-gray-500'}`}>
+                  {previewRole ? `กำลังดูเป็น ${user?.role}` : user?.role}
+                </p>
               </div>
             </Link>
 
@@ -653,8 +691,28 @@ const Layout: React.FC<{ children: ReactNode }> = ({ children }) => {
           </div>
         )}
 
-        <main className="flex-1 overflow-auto p-4 md:p-6 bg-slate-50/50">
-          <div className="max-w-7xl mx-auto">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-2.5 sm:p-4 md:p-6 bg-slate-50/50 w-full min-w-0 max-w-full">
+          <div className="max-w-7xl mx-auto w-full min-w-0">
+            {previewRole && (
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 shrink-0" />
+                  <span><strong>โหมดจำลอง:</strong> กำลังแสดงเมนู ปุ่ม และการทำงานในมุมมอง Role <strong>{previewRole}</strong> — Role จริงของคุณคือ {actualRole}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setPreviewRole(null); navigate(getDefaultPathForRole(actualRole || 'Admin')); }}
+                  className="rounded-md border border-amber-400 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                >
+                  กลับสู่ Role จริง
+                </button>
+              </div>
+            )}
+            {isViewer(user?.role) && (
+              <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-medium text-sky-800">
+                Viewer mode — คุณสามารถดูข้อมูลได้เท่านั้น ไม่สามารถเพิ่ม แก้ไข ลบ หรืออนุมัติรายการได้
+              </div>
+            )}
             {children}
           </div>
         </main>
@@ -698,7 +756,7 @@ export const AuthRBACRouter = () => {
           } />
 
           <Route path="/swo-creation" element={
-            <ProtectedRoute allowedRoles={['Admin', 'MD', 'PM', 'CM']}>
+            <ProtectedRoute allowedRoles={['Admin', 'MD', 'PM', 'CM']} viewerCanAccess={false}>
               <Layout>
                 <SWOCreationWrapper />
               </Layout>
@@ -748,7 +806,7 @@ export const AuthRBACRouter = () => {
           } />
 
           <Route path="/admin" element={
-            <ProtectedRoute allowedRoles={['Admin', 'Administrator' as any]}>
+            <ProtectedRoute allowedRoles={['Admin', 'Administrator' as any]} viewerCanAccess={false}>
               <Layout>
                 <AdminDashboard />
               </Layout>

@@ -1,0 +1,20 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isViewer() {
+      let userPath = /databases/(default)/documents/ConstructionControlData/root/users/$(request.auth.uid);
+      return isSignedIn()
+        && firestore.exists(userPath)
+        && firestore.get(userPath).data.role == 'Viewer';
+    }
+
+    match /{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && !isViewer();
+    }
+  }
+}

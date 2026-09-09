@@ -16,18 +16,18 @@ const DailyReportViewModal = ({ report, onClose }: { report: any; onClose: () =>
         <div className="fixed inset-0 bg-black/60 z-[80] flex items-center justify-center p-4 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
                 {/* Header */}
-                <div className="p-5 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50">
+                <div className="p-3.5 sm:p-4 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5 bg-slate-50/80">
                     <div>
-                        <h2 className="text-xl font-bold text-gray-900">Review Report: {report.swo_no || report.swo || '-'}</h2>
-                        <p className="text-sm text-gray-500 mt-0.5">{report.date} | By {report.supervisor_name || report.supervisor || '-'}</p>
+                        <h2 className="text-base sm:text-lg font-bold text-gray-900">Review Report: {report.swo_no || report.swo || '-'}</h2>
+                        <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{report.date} | By {report.supervisor_name || report.supervisor || '-'}</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold border ${statusColor}`}>{report.status}</span>
-                        <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-5 h-5" /></button>
+                    <div className="flex items-center gap-2.5">
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusColor}`}>{report.status}</span>
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-4 h-4" /></button>
                     </div>
                 </div>
 
-                <div className="p-5 flex-1 overflow-y-auto space-y-5">
+                <div className="p-3.5 sm:p-4 flex-1 overflow-y-auto space-y-3.5">
                     {/* Reject reason */}
                     {report.reject_reason && (
                         <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-3 text-sm text-red-700">
@@ -82,54 +82,57 @@ const DailyReportViewModal = ({ report, onClose }: { report: any; onClose: () =>
                         </div>
                     </div>
 
-                    {/* C2: Equipment Usage */}
-                    <div className="rounded-xl border border-orange-100 overflow-hidden">
-                        <div className="px-4 py-3 bg-orange-50 border-b border-orange-100 font-semibold text-orange-800 text-sm">
-                            Equipment Usage (C2)
+                    {/* C2: Equipment Usage & C3: Worker Headcount - Split Layout */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 items-start">
+                        {/* C2: Equipment Usage */}
+                        <div className="rounded-xl border border-orange-200/80 overflow-hidden bg-slate-50/40">
+                            <div className="px-3.5 py-2 bg-orange-50 border-b border-orange-100 font-semibold text-orange-800 text-xs sm:text-sm">
+                                Equipment Usage (C2)
+                            </div>
+                            <div className="p-2.5 sm:p-3 grid gap-2">
+                                {(report.equipments || []).map((e: any, i: number) => (
+                                    <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center bg-white p-2.5 rounded-lg border border-gray-100 text-xs shadow-xs">
+                                        <div className="w-full sm:w-1/3 font-medium text-gray-800 truncate">{e.name || e.equipment_id || '-'}</div>
+                                        <span className="px-1.5 py-0.5 bg-gray-50 border border-gray-200 rounded text-gray-700 text-[10px] font-semibold">{e.status || 'Working'}</span>
+                                        <div className="flex-1 text-gray-600 truncate">{e.work_detail || <span className="italic text-gray-400">No detail</span>}</div>
+                                        <div className="text-gray-700 font-semibold whitespace-nowrap">{e.hours || 0} <span className="text-[10px] font-normal text-gray-500">hrs</span></div>
+                                    </div>
+                                ))}
+                                {!(report.equipments || []).length && (
+                                    <p className="text-center text-gray-400 italic text-xs py-2">No equipment recorded</p>
+                                )}
+                            </div>
                         </div>
-                        <div className="p-4 grid gap-3">
-                            {(report.equipments || []).map((e: any, i: number) => (
-                                <div key={i} className="flex flex-col md:flex-row gap-3 items-start md:items-center bg-gray-50 p-3 rounded-lg border border-gray-100 text-sm">
-                                    <div className="w-full md:w-1/4 font-medium text-gray-800">{e.name || e.equipment_id || '-'}</div>
-                                    <span className="px-2 py-1 bg-white border border-gray-200 rounded text-gray-700 text-xs font-semibold">{e.status || 'Working'}</span>
-                                    <div className="flex-1 text-gray-600">{e.work_detail || <span className="italic text-gray-400">No detail</span>}</div>
-                                    <div className="text-gray-700 font-semibold">{e.hours || 0} <span className="text-xs font-normal text-gray-500">hrs</span></div>
-                                </div>
-                            ))}
-                            {!(report.equipments || []).length && (
-                                <p className="text-center text-gray-400 italic text-sm py-2">No equipment recorded</p>
-                            )}
-                        </div>
-                    </div>
 
-                    {/* C3: Worker Headcount */}
-                    <div className="rounded-xl border border-indigo-100 overflow-hidden">
-                        <div className="px-4 py-3 bg-indigo-50 border-b border-indigo-100 font-semibold text-indigo-800 text-sm">
-                            Worker Headcount (C3)
-                        </div>
-                        <div className="p-4 grid gap-3">
-                            {(report.workers || []).map((w: any, i: number) => (
-                                <div key={i} className="flex flex-col md:flex-row gap-3 items-start md:items-center bg-gray-50 p-3 rounded-lg border border-gray-100 text-sm">
-                                    <div className="w-full md:w-1/3 font-medium text-gray-800">{w.name || w.team_id || '-'}</div>
-                                    <div className="flex gap-6">
-                                        <div className="text-center">
-                                            <p className="text-xs text-gray-500 mb-0.5">Total</p>
-                                            <p className="font-bold text-gray-800">{w.actual_headcount || 0}</p>
-                                        </div>
-                                        <div className="text-center">
-                                            <p className="text-xs text-blue-500 mb-0.5">Male</p>
-                                            <p className="font-bold text-blue-700">{w.male || 0}</p>
-                                        </div>
-                                        <div className="text-center">
-                                            <p className="text-xs text-pink-500 mb-0.5">Female</p>
-                                            <p className="font-bold text-pink-700">{w.female || 0}</p>
+                        {/* C3: Worker Headcount */}
+                        <div className="rounded-xl border border-indigo-200/80 overflow-hidden bg-slate-50/40">
+                            <div className="px-3.5 py-2 bg-indigo-50 border-b border-indigo-100 font-semibold text-indigo-800 text-xs sm:text-sm">
+                                Worker Headcount (C3)
+                            </div>
+                            <div className="p-2.5 sm:p-3 grid gap-2">
+                                {(report.workers || []).map((w: any, i: number) => (
+                                    <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center bg-white p-2.5 rounded-lg border border-gray-100 text-xs shadow-xs">
+                                        <div className="w-full sm:w-2/5 font-medium text-gray-800 truncate">{w.name || w.team_id || '-'}</div>
+                                        <div className="flex gap-4 sm:ml-auto">
+                                            <div className="text-center">
+                                                <p className="text-[10px] text-gray-500">Total</p>
+                                                <p className="font-bold text-gray-800 text-xs">{w.actual_headcount || 0}</p>
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-[10px] text-blue-500">Male</p>
+                                                <p className="font-bold text-blue-700 text-xs">{w.male || 0}</p>
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-[10px] text-pink-500">Female</p>
+                                                <p className="font-bold text-pink-700 text-xs">{w.female || 0}</p>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))}
-                            {!(report.workers || []).length && (
-                                <p className="text-center text-gray-400 italic text-sm py-2">No workers recorded</p>
-                            )}
+                                ))}
+                                {!(report.workers || []).length && (
+                                    <p className="text-center text-gray-400 italic text-xs py-2">No workers recorded</p>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -435,7 +438,7 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onCmAccept, onCmReject, 
                     </div>
                 )}
 
-                <div ref={scrollContainerRef} className="p-6 overflow-y-auto space-y-6 flex-1 bg-gray-50/50">
+                <div ref={scrollContainerRef} className="p-3.5 sm:p-4 overflow-y-auto space-y-3.5 flex-1 bg-gray-50/50">
                     {/* Summary Table */}
                     <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm bg-white">
                         <table className="w-full text-sm text-center text-nowrap">
@@ -470,18 +473,18 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onCmAccept, onCmReject, 
                         </table>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 items-start">
                         {/* CM Section */}
                         {(status === 'CM Review' || status === 'PM Review' || status === 'CD Review' || status === 'MD Review' || status === 'Closed SWO') && (
-                            <div className="bg-white p-5 rounded-xl border border-green-200 shadow-sm space-y-3">
-                                <h3 className="text-base font-bold text-gray-900 border-b pb-2 flex items-center gap-2">
-                                    <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 text-xs font-bold flex items-center justify-center">CM</span>
+                            <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-green-200/90 shadow-xs space-y-2.5">
+                                <h3 className="text-xs sm:text-sm font-bold text-gray-900 border-b pb-1.5 flex items-center gap-1.5">
+                                    <span className="w-5 h-5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold flex items-center justify-center">CM</span>
                                     CM Evaluation
-                                    {status !== 'CM Review' && status !== 'Closed SWO' && <span className="ml-auto text-xs text-green-600 font-normal bg-green-50 px-2 py-0.5 rounded-full">✓ Reviewed</span>}
+                                    {status !== 'CM Review' && status !== 'Closed SWO' && <span className="ml-auto text-[10px] text-green-600 font-normal bg-green-50 px-1.5 py-0.5 rounded-full">✓ Reviewed</span>}
                                 </h3>
                                 <div className="space-y-1">
-                                    <label className="text-sm font-semibold text-gray-700">CM Note/Comment</label>
-                                    <textarea rows={4} className={`w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none ${!isCmEditable ? 'bg-gray-50 text-gray-600 border-gray-200' : 'bg-white border-green-300'}`}
+                                    <label className="text-xs font-semibold text-gray-700">CM Note/Comment</label>
+                                    <textarea rows={3} className={`w-full border rounded-lg p-2 text-xs sm:text-sm focus:ring-2 focus:ring-green-500 outline-none ${!isCmEditable ? 'bg-gray-50 text-gray-600 border-gray-200' : 'bg-white border-green-300'}`}
                                         placeholder={!isCmEditable ? 'No comment from CM' : 'Enter CM notes...'}
                                         value={cmNote} onChange={(e) => setCmNote(e.target.value)} readOnly={!isCmEditable} />
                                 </div>
@@ -489,35 +492,35 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onCmAccept, onCmReject, 
                         )}
 
                         {/* PM Section */}
-                        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
-                            <h3 className="text-base font-bold text-gray-900 border-b pb-2 flex items-center gap-2">
-                                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">PM</span>
+                        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-gray-200/90 shadow-xs space-y-2.5">
+                            <h3 className="text-xs sm:text-sm font-bold text-gray-900 border-b pb-1.5 flex items-center gap-1.5">
+                                <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center">PM</span>
                                 PM Evaluation
                             </h3>
                             <div className="space-y-1">
-                                <label className="text-sm font-semibold text-gray-700">PM Note/Comment</label>
-                                <textarea rows={3} className={`w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${!isPmEditable ? 'bg-gray-50 text-gray-600 border-gray-200' : 'bg-white border-gray-300'}`}
+                                <label className="text-xs font-semibold text-gray-700">PM Note/Comment</label>
+                                <textarea rows={2} className={`w-full border rounded-lg p-2 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 outline-none ${!isPmEditable ? 'bg-gray-50 text-gray-600 border-gray-200' : 'bg-white border-gray-300'}`}
                                     placeholder={!isPmEditable ? "No comment from PM" : "Enter PM notes..."}
                                     value={pmNote} onChange={(e) => setPmNote(e.target.value)} readOnly={!isPmEditable} />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-3">
                                 <div className="space-y-1">
-                                    <label className="text-sm font-semibold text-gray-700">Quality of Work (%)</label>
+                                    <label className="text-xs font-semibold text-gray-700">Quality of Work (%)</label>
                                     <div className="relative">
                                         <input type="number" min="0" max="100"
-                                            className={`w-full border rounded-lg p-2.5 pr-7 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${!isPmEditable ? 'bg-gray-50 text-gray-600 border-gray-200' : 'bg-white border-gray-300'}`}
+                                            className={`w-full border rounded-lg p-2 pr-6 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 outline-none ${!isPmEditable ? 'bg-gray-50 text-gray-600 border-gray-200' : 'bg-white border-gray-300'}`}
                                             placeholder="0-100" value={pmQuality} onChange={(e) => setPmQuality(e.target.value)} readOnly={!isPmEditable} />
-                                        <span className="absolute right-2.5 top-2.5 text-gray-400 text-xs">%</span>
+                                        <span className="absolute right-2 top-2 text-gray-400 text-xs">%</span>
                                     </div>
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-sm font-semibold text-gray-700">Schedule on time</label>
-                                    <div className="flex gap-3 mt-1.5">
+                                    <label className="text-xs font-semibold text-gray-700">Schedule on time</label>
+                                    <div className="flex gap-2.5 mt-1.5">
                                         {(['Yes', 'No'] as const).map(v => (
-                                            <label key={v} className={`flex items-center gap-1.5 cursor-pointer ${!isPmEditable ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                                            <label key={v} className={`flex items-center gap-1 cursor-pointer text-xs ${!isPmEditable ? 'opacity-60 cursor-not-allowed' : ''}`}>
                                                 <input type="radio" name="onTime" className="w-3.5 h-3.5 text-blue-600"
                                                     checked={pmOnTime === v} onChange={() => setPmOnTime(v)} disabled={!isPmEditable} />
-                                                <span className="text-sm">{v}</span>
+                                                <span>{v}</span>
                                             </label>
                                         ))}
                                     </div>
@@ -525,8 +528,8 @@ const ProposeDetailModal = ({ isOpen, onClose, swoData, onCmAccept, onCmReject, 
                             </div>
                             {pmOnTime === 'No' && (
                                 <div className="space-y-1">
-                                    <label className="text-sm font-semibold text-gray-700">Delay Reason</label>
-                                    <input type="text" className={`w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${!isPmEditable ? 'bg-gray-50 text-gray-600 border-gray-200' : 'bg-white border-gray-300'}`}
+                                    <label className="text-xs font-semibold text-gray-700">Delay Reason</label>
+                                    <input type="text" className={`w-full border rounded-lg p-2 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 outline-none ${!isPmEditable ? 'bg-gray-50 text-gray-600 border-gray-200' : 'bg-white border-gray-300'}`}
                                         placeholder="Explain delay..." value={pmDelay} onChange={(e) => setPmDelay(e.target.value)} readOnly={!isPmEditable} />
                                 </div>
                             )}
@@ -1087,40 +1090,40 @@ export const SWOCloseWorkflow = () => {
     };
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-xs border border-gray-200/90 overflow-hidden max-w-7xl mx-auto w-full min-w-0">
             <AlertModal {...modalProps} />
-            <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-gray-50/50">
+            <div className="p-3.5 sm:p-4 border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 bg-gray-50/50">
                 <div>
-                    <h2 className="text-xl font-bold text-gray-900 flex items-center">
-                        <FileCheck className="w-6 h-6 mr-2 text-blue-600" />
+                    <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center">
+                        <FileCheck className="w-5 h-5 mr-1.5 text-blue-600" />
                         Close Site Work Order
                     </h2>
-                    <p className="text-gray-500 mt-1 text-sm">Finalize SWO and propose detail site work completed.</p>
+                    <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Finalize SWO and propose detail site work completed.</p>
                 </div>
                 {isSupervisorLike && (
                     <button
                         onClick={() => setIsReqModalOpen(true)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 font-medium transition-colors flex items-center gap-2"
+                        className="px-3.5 py-1.5 bg-blue-600 text-white rounded-lg shadow-xs hover:bg-blue-700 font-medium text-xs sm:text-sm transition-colors flex items-center gap-1.5"
                     >
-                        <CheckCircle2 className="w-5 h-5" /> Request Closure
+                        <CheckCircle2 className="w-4 h-4" /> Request Closure
                     </button>
                 )}
             </div>
 
-            <div className="p-0">
-                <table className="w-full text-sm text-left">
+            <div className="overflow-x-auto w-full min-w-0">
+                <table className="w-full text-sm text-left whitespace-nowrap">
                     <thead className="bg-gray-50 text-gray-700 border-b border-gray-200">
                         <tr>
-                            <th className="px-6 py-4 font-semibold">SWO No.</th>
-                            <th className="px-6 py-4 font-semibold">Work Name</th>
-                            <th className="px-6 py-4 font-semibold">Closure Status</th>
-                            <th className="px-6 py-4 font-semibold text-right">Action</th>
+                            <th className="px-4 py-2 font-semibold">SWO No.</th>
+                            <th className="px-4 py-2 font-semibold">Work Name</th>
+                            <th className="px-4 py-2 font-semibold">Closure Status</th>
+                            <th className="px-4 py-2 font-semibold text-right">Action</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {swos.length === 0 ? (
                             <tr>
-                                <td colSpan={4} className="px-6 py-8 text-center text-gray-500">No Site Work Orders found.</td>
+                                <td colSpan={4} className="px-4 py-4 text-center text-gray-500">No Site Work Orders found.</td>
                             </tr>
                         ) : swos.map(swo => {
                             const cs = swo.closure_status || 'Active';
@@ -1134,16 +1137,16 @@ export const SWOCloseWorkflow = () => {
                                     onClick={() => isRejectedBySupervisor ? handleOpenRejectionModal(swo) : openDetailModal(swo)}
                                     className={`cursor-pointer hover:bg-blue-50/60 transition-colors ${isClosed ? 'bg-green-50/30' : isRejectedBySupervisor ? 'bg-red-50/30' : ''}`}
                                 >
-                                    <td className="px-6 py-4 font-medium text-gray-900">{swo.swo_no}</td>
-                                    <td className="px-6 py-4 text-gray-600">{swo.work_name}</td>
-                                    <td className="px-6 py-4">
+                                    <td className="px-4 py-1.5 font-medium text-gray-900">{swo.swo_no}</td>
+                                    <td className="px-4 py-1.5 text-gray-600">{swo.work_name}</td>
+                                    <td className="px-4 py-1.5">
                                         {isRejectedBySupervisor ? (
-                                            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
                                                 PM Rejected
                                             </span>
                                         ) : (
                                             <>
-                                                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusBadge(cs)}`}>{cs}</span>
+                                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusBadge(cs)}`}>{cs}</span>
                                                 {swo.cm_reject_reason && cs === 'CM Review' && (
                                                     <span className="ml-2 text-xs text-red-600 font-medium">CM Rejected</span>
                                                 )}
@@ -1156,12 +1159,12 @@ export const SWOCloseWorkflow = () => {
                                             </>
                                         )}
                                     </td>
-                                    <td className="px-6 py-4 text-right">
+                                    <td className="px-4 py-1.5 text-right">
                                         <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
                                             {isRejectedBySupervisor ? (
                                                 <button
                                                     onClick={() => handleOpenRejectionModal(swo)}
-                                                    className="px-3 py-1.5 bg-red-50 border border-red-200 text-red-600 rounded hover:bg-red-100 font-medium text-xs transition-colors flex items-center gap-1"
+                                                    className="px-2 py-1 bg-red-50 border border-red-200 text-red-600 rounded hover:bg-red-100 font-medium text-xs transition-colors flex items-center gap-1"
                                                 >
                                                     <AlertCircle className="w-3.5 h-3.5" /> View Rejection
                                                 </button>
@@ -1170,21 +1173,21 @@ export const SWOCloseWorkflow = () => {
                                                     {canCancel && (
                                                         <button
                                                             onClick={() => handleCancelRequest(swo.id)}
-                                                            className="px-3 py-1.5 bg-red-50 border border-red-200 text-red-600 rounded hover:bg-red-100 font-medium text-xs transition-colors flex items-center gap-1"
+                                                            className="px-2 py-1 bg-red-50 border border-red-200 text-red-600 rounded hover:bg-red-100 font-medium text-xs transition-colors flex items-center gap-1"
                                                         >
                                                             <XCircle className="w-3.5 h-3.5" /> Cancel Request
                                                         </button>
                                                     )}
                                                     <button
                                                         onClick={() => openDetailModal(swo)}
-                                                        className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 font-medium text-xs transition-colors flex items-center gap-1"
+                                                        className="px-2 py-1 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 font-medium text-xs transition-colors flex items-center gap-1"
                                                     >
                                                         <Eye className="w-3.5 h-3.5" /> View Details
                                                     </button>
                                                     {isSystemAdmin(user?.role) && (
                                                         <button
                                                             onClick={() => { setDeleteTargetId(swo.id); setDeleteTargetNo(swo.swo_no || swo.id); }}
-                                                            className="px-3 py-1.5 bg-red-600 text-white rounded hover:bg-red-700 font-medium text-xs transition-colors flex items-center gap-1"
+                                                            className="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 font-medium text-xs transition-colors flex items-center gap-1"
                                                             title="ลบ SWO นี้"
                                                         >
                                                             <Trash2 className="w-3.5 h-3.5" /> ลบ

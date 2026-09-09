@@ -9,31 +9,31 @@ import { canAccessAllProjects, canManageProjectResources, canManageProjects } fr
 // --- Components ---
 
 const CardStats = ({ title, value, icon: Icon, colorClass }: any) => (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
-        <div className={`p-4 rounded-lg mr-4 ${colorClass}`}>
-            <Icon className="w-6 h-6 text-white" />
+    <div className="bg-white rounded-xl shadow-xs border border-gray-200/90 p-3 sm:p-3.5 flex items-center">
+        <div className={`p-2 sm:p-2.5 rounded-lg mr-3 ${colorClass}`}>
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
         </div>
         <div>
-            <p className="text-sm font-medium text-gray-500">{title}</p>
-            <p className="text-2xl font-bold text-gray-900">{value}</p>
+            <p className="text-xs font-medium text-gray-500">{title}</p>
+            <p className="text-lg sm:text-xl font-bold text-gray-900 leading-tight">{value}</p>
         </div>
     </div>
 );
 
 const SectionHeader = ({ title, onAdd, canAdd, icon: Icon, rightArea }: any) => (
-    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-        <div className="flex items-center gap-2">
-            <Icon className="w-5 h-5 text-gray-400" />
-            <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-2.5 gap-2.5">
+        <div className="flex items-center gap-1.5">
+            <Icon className="w-4 h-4 text-gray-500" />
+            <h3 className="text-xs sm:text-sm font-semibold text-gray-800">{title}</h3>
         </div>
-        <div className="flex flex-wrap items-center gap-2 md:gap-4 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full md:w-auto">
             {rightArea}
             {canAdd && (
                 <button
                     onClick={onAdd}
-                    className="flex items-center px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md text-sm font-medium transition-colors"
+                    className="flex items-center px-2.5 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md text-xs font-medium transition-colors shadow-xs"
                 >
-                    <Plus className="w-4 h-4 mr-1" /> Add New
+                    <Plus className="w-3.5 h-3.5 mr-1" /> Add New
                 </button>
             )}
         </div>
@@ -491,20 +491,20 @@ export default function ProjectDashboard() {
     const handleImportTemplate = () => { showAlert('info', 'Import Template', 'กรุณา Download Template ก่อน แล้วกรอกข้อมูล จากนั้น Import ผ่านระบบ (Feature coming soon)'); };
 
     const renderProjectFilterDropdown = () => (
-        <div className="flex flex-wrap items-center gap-2 md:gap-3 w-full md:w-auto">
-            <button onClick={handleDownloadTemplate} type="button" className="text-sm text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded-md flex items-center font-medium transition-colors shadow-sm">
-                <Download className="w-4 h-4 mr-1.5" /> Template
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full md:w-auto">
+            <button onClick={handleDownloadTemplate} type="button" className="text-xs text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 px-2.5 py-1 rounded-md flex items-center font-medium transition-colors shadow-xs">
+                <Download className="w-3.5 h-3.5 mr-1" /> Template
             </button>
-            <button onClick={handleImportTemplate} type="button" className="text-sm text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-3 py-1.5 rounded-md flex items-center font-medium transition-colors">
-                <Upload className="w-4 h-4 mr-1.5" /> Import
+            <button onClick={handleImportTemplate} type="button" className="text-xs text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-2.5 py-1 rounded-md flex items-center font-medium transition-colors">
+                <Upload className="w-3.5 h-3.5 mr-1" /> Import
             </button>
-            <button onClick={handleExportExcel} type="button" className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-3 py-1.5 rounded-md flex items-center font-medium transition-colors">
-                <FileSpreadsheet className="w-4 h-4 mr-1.5" /> Export to Excel
+            <button onClick={handleExportExcel} type="button" className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-2.5 py-1 rounded-md flex items-center font-medium transition-colors shadow-xs">
+                <FileSpreadsheet className="w-3.5 h-3.5 mr-1" /> Export
             </button>
-            <div className="w-px h-6 bg-gray-300 mx-1"></div>
-            <label className="text-sm font-medium text-gray-700">Filter by Project:</label>
+            <div className="w-px h-5 bg-gray-300 mx-0.5 hidden sm:block"></div>
+            <label className="text-xs font-medium text-gray-700 hidden sm:inline">Project:</label>
             <select
-                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 outline-none font-medium"
+                className="bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg focus:ring-blue-500 focus:border-blue-500 block py-1 px-2 outline-none font-medium"
                 value={selectedProjectFilter}
                 onChange={(e) => setSelectedProjectFilter(e.target.value)}
             >
@@ -520,24 +520,26 @@ export default function ProjectDashboard() {
     const canAddResource = canManageProjectResources(user?.role);
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-3.5 max-w-7xl mx-auto pb-10 w-full min-w-0">
             <AlertModal {...modalProps} />
-            <div>
-                <h1 className="text-2xl font-bold text-gray-900">Project Workspace</h1>
-                <p className="text-gray-500">Manage projects, supervisors, equipment, and worker teams.</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                    <h1 className="text-lg sm:text-xl font-bold text-gray-900">Project Workspace</h1>
+                    <p className="text-xs sm:text-sm text-gray-500">Manage projects, supervisors, equipment, and worker teams.</p>
+                </div>
             </div>
 
             {/* Stats Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 w-full min-w-0">
                 <CardStats title="Active Projects" value={visibleProjects.length} icon={Building2} colorClass="bg-blue-500" />
                 <CardStats title="Supervisors" value={visibleSupervisors.length} icon={ShieldCheck} colorClass="bg-indigo-500" />
                 <CardStats title="Equipment" value={visibleEquipments.length} icon={Wrench} colorClass="bg-orange-500" />
                 <CardStats title="Worker Teams" value={visibleWorkerTeams.length} icon={Users} colorClass="bg-green-500" />
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-white rounded-xl shadow-xs border border-gray-200/90 overflow-hidden w-full min-w-0">
                 {/* Tabs */}
-                <div className="flex border-b border-gray-100 bg-gray-50/50 overflow-x-auto scrollbar-hide w-full">
+                <div className="flex border-b border-gray-100 bg-gray-50/50 overflow-x-auto scrollbar-hide w-full min-w-0">
                     {[
                         { id: 'A1', label: 'Projects', icon: Building2 },
                         { id: 'A2', label: 'Supervisors', icon: ShieldCheck },
@@ -548,68 +550,68 @@ export default function ProjectDashboard() {
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`
-                flex items-center px-6 py-4 text-sm font-medium border-b-2 transition-colors
+                flex items-center px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors
                 ${activeTab === tab.id
-                                    ? 'border-blue-500 text-blue-600 bg-white'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100'}
+                                    ? 'border-blue-500 text-blue-600 bg-white shadow-xs'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100/70'}
               `}
                         >
-                            <tab.icon className="w-4 h-4 mr-2" />
+                            <tab.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5" />
                             {tab.label}
                         </button>
                     ))}
                 </div>
 
                 {/* Search Bar */}
-                <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div className="relative w-full md:w-72">
-                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <div className="p-3 sm:p-3.5 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-2.5">
+                    <div className="relative w-full md:w-64">
+                        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input
                             type="text"
                             placeholder="Search..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full pl-8 pr-3 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                     </div>
 
                     {activeTab === 'A1' && canAddProject && (
                         <button
                             onClick={() => { closeModal(); setIsCreateModalOpen(true); }}
-                            className="flex items-center justify-center w-full md:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm">
-                            <Plus className="w-4 h-4 mr-2" /> Create Project
+                            className="flex items-center justify-center w-full md:w-auto px-3.5 py-1.5 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-xs">
+                            <Plus className="w-3.5 h-3.5 mr-1.5" /> Create Project
                         </button>
                     )}
                 </div>
 
                 {/* Data Tables */}
-                <div className="p-0 overflow-x-auto">
+                <div className="overflow-x-auto w-full min-w-0">
                     {activeTab === 'A1' && (
-                        <table className="w-full text-left text-sm text-gray-600 text-nowrap">
-                            <thead className="bg-gray-50 text-gray-700 font-medium border-b border-gray-100">
+                        <table className="w-full text-left text-xs text-gray-600 text-nowrap">
+                            <thead className="bg-gray-50/90 text-gray-700 font-semibold border-b border-gray-100">
                                 <tr>
-                                    <th className="px-6 py-3">Project No</th>
-                                    <th className="px-6 py-3">Name</th>
-                                    <th className="px-6 py-3">Location</th>
-                                    <th className="px-6 py-3">Status</th>
-                                    <th className="px-6 py-3 text-right">Actions</th>
+                                    <th className="px-3.5 py-2">Project No</th>
+                                    <th className="px-3.5 py-2">Name</th>
+                                    <th className="px-3.5 py-2">Location</th>
+                                    <th className="px-3.5 py-2">Status</th>
+                                    <th className="px-3.5 py-2 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {visibleProjects.map(p => (
-                                    <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 font-medium text-gray-900">{p.no}</td>
-                                        <td className="px-6 py-4">
+                                    <tr key={p.id} className="hover:bg-gray-50/80 transition-colors">
+                                        <td className="px-3.5 py-2 font-semibold text-gray-900">{p.no}</td>
+                                        <td className="px-3.5 py-2">
                                             {p.name}
                                             {p.isMaster && (
-                                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800">
                                                     MasterData
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4">{p.location}</td>
-                                        <td className="px-6 py-4">
-                                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                                        <td className="px-3.5 py-2">{p.location}</td>
+                                        <td className="px-3.5 py-2">
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                                                 p.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 
                                                 p.status === 'HOLD' ? 'bg-orange-100 text-orange-700' :
                                                 p.status === 'COMPLETE' ? 'bg-blue-100 text-blue-700' :
@@ -619,7 +621,7 @@ export default function ProjectDashboard() {
                                                 {p.status}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-right space-x-2">
+                                        <td className="px-3.5 py-2 text-right space-x-1.5">
                                             <button onClick={() => handleView(p)} className="text-blue-600 hover:text-blue-800 font-medium">View</button>
                                             {canAddProject && (
                                                 <>
@@ -637,15 +639,15 @@ export default function ProjectDashboard() {
                                     </tr>
                                 ))}
                                 {visibleProjects.length === 0 && (
-                                    <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">No projects found.</td></tr>
+                                    <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">No projects found.</td></tr>
                                 )}
                             </tbody>
                         </table>
                     )}
 
                     {activeTab === 'A2' && (
-                        <div className="p-0 overflow-x-auto">
-                            <div className="p-6 pb-2">
+                        <div className="overflow-x-auto w-full min-w-0">
+                            <div className="p-3 sm:p-3.5 pb-1.5">
                                 <SectionHeader
                                     title="A2. รายการ Supervisor"
                                     canAdd={canAddResource}
@@ -708,8 +710,8 @@ export default function ProjectDashboard() {
                     )}
 
                     {activeTab === 'A3' && (
-                        <div className="p-0 overflow-x-auto">
-                            <div className="p-6 pb-2">
+                        <div className="overflow-x-auto w-full min-w-0">
+                            <div className="p-3 sm:p-3.5 pb-1.5">
                                 <SectionHeader
                                     title="A3. รายการเครื่องจักร"
                                     canAdd={canAddResource}
@@ -774,8 +776,8 @@ export default function ProjectDashboard() {
                     )}
 
                     {activeTab === 'A4' && (
-                        <div className="p-0 overflow-x-auto">
-                            <div className="p-6 pb-2">
+                        <div className="overflow-x-auto w-full min-w-0">
+                            <div className="p-3 sm:p-3.5 pb-1.5">
                                 <SectionHeader
                                     title="A4: ตารางรายการ Worker team ของแต่ละโครงการ (Project Worker Team list)"
                                     canAdd={canAddResource}

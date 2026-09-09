@@ -11,7 +11,7 @@ import {
 } from 'firebase/auth';
 import { getDoc, setDoc, getDocs, query, limit, onSnapshot } from 'firebase/firestore';
 import { auth, col, docRef, logActivity } from './firebase';
-import { ALL_APP_ROLES } from './roleUtils';
+import { ALL_APP_ROLES, isSystemAdmin } from './roleUtils';
 
 export type Role = typeof ALL_APP_ROLES[number];
 export type Status = 'Pending' | 'Approved' | 'Rejected';
@@ -31,7 +31,12 @@ export interface AppUser {
 
 interface AuthContextType {
     currentUser: FirebaseUser | null;
+    /** User profile with the effective role used by the UI/RBAC checks. */
     appUser: AppUser | null;
+    /** Unmodified signed-in user profile, even while previewing another role. */
+    actualAppUser: AppUser | null;
+    previewRole: Role | null;
+    setPreviewRole: (role: Role | null) => void;
     loading: boolean;
     register: (email: string, password: string, firstName: string, lastName: string, position: string) => Promise<void>;
     login: (email: string, password: string) => Promise<void>;
@@ -51,7 +56,17 @@ export const useAuthContext = () => {
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
     const [appUser, setAppUser] = useState<AppUser | null>(null);
+    const [previewRole, setPreviewRoleState] = useState<Role | null>(null);
     const [loading, setLoading] = useState(true);
+
+    const setPreviewRole = (role: Role | null) => {
+        // This is intentionally based on the real role, never the preview role.
+        setPreviewRoleState(isSystemAdmin(appUser?.role) ? role : null);
+    };
+
+    const effectiveAppUser = appUser && previewRole && isSystemAdmin(appUser.role)
+        ? { ...appUser, role: previewRole }
+        : appUser;
 
     useEffect(() => {
         let unsubscribeSnapshot: (() => void) | null = null;
@@ -61,6 +76,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (!isMounted) return;
             setCurrentUser(null);
             setAppUser(null);
+            setPreviewRoleState(null);
         };
 
         const handleAuthStateChange = async (user: FirebaseUser | null) => {
@@ -99,6 +115,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     }
 
                     setAppUser({ uid: user.uid, ...userData });
+                    if (!isSystemAdmin(userData.role)) setPreviewRoleState(null);
                     if (isMounted) setLoading(false);
                 },
                 () => {
@@ -255,6 +272,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
         await signOut(auth);
         setAppUser(null);
+        setPreviewRoleState(null);
     };
 
     const resetPassword = async (email: string) => {
@@ -263,7 +281,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const value = {
         currentUser,
-        appUser,
+        appUser: effectiveAppUser,
+        actualAppUser: appUser,
+        previewRole,
+        setPreviewRole,
         loading,
         register,
         login,

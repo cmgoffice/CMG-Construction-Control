@@ -3,6 +3,7 @@ import { useAuthContext } from './AuthContext';
 import { updateDoc } from 'firebase/firestore';
 import { docRef } from './firebase';
 import { User, KeyRound, Save } from 'lucide-react';
+import { isViewer } from './roleUtils';
 
 export const Profile = () => {
     const { currentUser, appUser, resetPassword } = useAuthContext();
@@ -46,6 +47,7 @@ export const Profile = () => {
     };
 
     if (!appUser) return <div>Loading Profile...</div>;
+    const readOnly = isViewer(appUser.role);
 
     return (
         <div className="max-w-2xl mx-auto space-y-6">
@@ -70,6 +72,7 @@ export const Profile = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
                             <input
                                 required
+                                disabled={readOnly}
                                 type="text"
                                 className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none"
                                 value={firstName}
@@ -80,6 +83,7 @@ export const Profile = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
                             <input
                                 required
+                                disabled={readOnly}
                                 type="text"
                                 className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none"
                                 value={lastName}
@@ -90,6 +94,7 @@ export const Profile = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-2">Position / Title</label>
                             <input
                                 required
+                                disabled={readOnly}
                                 type="text"
                                 className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none"
                                 value={position}
@@ -112,13 +117,14 @@ export const Profile = () => {
                         <button
                             type="button"
                             onClick={handleResetPassword}
+                            disabled={readOnly}
                             className="text-sm flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-medium px-4 py-2 hover:bg-indigo-50 rounded-lg transition-colors"
                         >
                             <KeyRound className="w-4 h-4" /> Send Password Reset
                         </button>
 
                         <button
-                            disabled={saving}
+                            disabled={saving || readOnly}
                             type="submit"
                             className="bg-blue-600 text-white font-medium py-2.5 px-6 rounded-lg shadow-sm hover:bg-blue-700 hover:shadow-md transition-all disabled:bg-blue-400 flex items-center gap-2"
                         >

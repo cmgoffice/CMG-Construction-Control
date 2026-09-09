@@ -431,32 +431,32 @@ export default function ExecutiveDashboards() {
     }, [selectedProject, selectedSupervisor, visibleProjects, swos, dailyReports, supervisors, users]);
 
     return (
-        <div className="space-y-8 pb-12">
+        <div className="space-y-4 max-w-7xl mx-auto pb-10 w-full min-w-0">
 
             <div>
-                <h1 className="text-2xl font-bold text-gray-900">Analytics & Dashboards</h1>
-                <p className="text-gray-500">Track project progress and executive performance metrics.</p>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Analytics & Dashboards</h1>
+                <p className="text-xs sm:text-sm text-gray-500">Track project progress and executive performance metrics.</p>
             </div>
 
             {/* SWO Summary & Reporting Frequency */}
-            <section className="space-y-5">
+            <section className="space-y-3.5">
                 <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
                     <div>
-                        <h2 className="text-xl font-bold text-gray-900 flex items-center">
-                            <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-pink-300 via-amber-200 to-sky-300 text-white flex items-center justify-center mr-3 shadow-sm">
-                                <ClipboardCheck className="w-5 h-5" />
+                        <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center">
+                            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-pink-300 via-amber-200 to-sky-300 text-white flex items-center justify-center mr-2.5 shadow-xs">
+                                <ClipboardCheck className="w-4 h-4" />
                             </span>
                             <span className="bg-gradient-to-r from-pink-600 via-orange-500 to-sky-600 bg-clip-text text-transparent">
                                 SWO Summary & Daily Report Frequency
                             </span>
                         </h2>
-                        <p className="text-sm text-gray-500 mt-1">สรุปจำนวน SWO, งานที่ปิดแล้ว และความสม่ำเสมอของการส่ง Daily Report ตามช่วง Start - End Date</p>
+                        <p className="text-xs text-gray-500 mt-0.5">สรุปจำนวน SWO, งานที่ปิดแล้ว และความสม่ำเสมอของการส่ง Daily Report ตามช่วง Start - End Date</p>
                     </div>
                     <div className="flex flex-col sm:flex-row sm:items-end gap-3">
                         <div className="flex flex-col">
                             <label className="text-[11px] font-bold uppercase tracking-wider text-sky-500 mb-1">Project</label>
                             <select
-                                className="min-w-[190px] border-sky-200 bg-sky-50 text-sky-800 font-medium rounded-lg text-sm px-3 py-2 outline-none focus:ring-2 focus:ring-sky-300 border"
+                                className="min-w-[170px] border-sky-200 bg-sky-50 text-sky-800 font-medium rounded-lg text-xs px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-sky-300 border"
                                 value={selectedProject}
                                 onChange={(e) => {
                                     setSelectedProject(e.target.value);
@@ -472,7 +472,7 @@ export default function ExecutiveDashboards() {
                         <div className="flex flex-col">
                             <label className="text-[11px] font-bold uppercase tracking-wider text-pink-500 mb-1">Supervisor</label>
                             <select
-                                className="min-w-[190px] border-pink-200 bg-pink-50 text-pink-800 font-medium rounded-lg text-sm px-3 py-2 outline-none focus:ring-2 focus:ring-pink-300 border"
+                                className="min-w-[170px] border-pink-200 bg-pink-50 text-pink-800 font-medium rounded-lg text-xs px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-pink-300 border"
                                 value={selectedSupervisor}
                                 onChange={(e) => setSelectedSupervisor(e.target.value)}
                             >
@@ -499,61 +499,61 @@ export default function ExecutiveDashboards() {
                     {!isAdminExec && <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full font-medium">PM/CM scoped to own projects</span>}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-gradient-to-br from-pink-50 via-orange-50 to-amber-50 p-5 rounded-xl border border-pink-200 shadow-sm shadow-pink-100">
-                        <div className="flex items-start justify-between gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full min-w-0">
+                    <div className="bg-gradient-to-br from-pink-50 via-orange-50 to-amber-50 p-3.5 sm:p-4 rounded-xl border border-pink-200 shadow-xs shadow-pink-100">
+                        <div className="flex items-start justify-between gap-2.5">
                             <div>
-                                <p className="text-xs font-bold uppercase tracking-wider text-pink-500">Total SWO</p>
-                                <p className="text-3xl font-bold text-pink-700 mt-1">{swoSummaryAnalytics.totalSwos}</p>
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-pink-500">Total SWO</p>
+                                <p className="text-2xl font-bold text-pink-700 mt-0.5">{swoSummaryAnalytics.totalSwos}</p>
                             </div>
-                            <div className="w-11 h-11 rounded-xl bg-white/80 text-orange-500 flex items-center justify-center border border-orange-100 shadow-sm">
-                                <ClipboardCheck className="w-5 h-5" />
+                            <div className="w-9 h-9 rounded-lg bg-white/80 text-orange-500 flex items-center justify-center border border-orange-100 shadow-xs">
+                                <ClipboardCheck className="w-4 h-4" />
                             </div>
                         </div>
-                        <div className="mt-4 h-2.5 rounded-full bg-white/80 overflow-hidden">
+                        <div className="mt-3 h-2 rounded-full bg-white/80 overflow-hidden">
                             <div className="h-full bg-gradient-to-r from-pink-400 to-orange-400 rounded-full" style={{ width: swoSummaryAnalytics.totalSwos > 0 ? '100%' : '0%' }} />
                         </div>
-                        <p className="text-xs text-pink-700/80 mt-2">Active scope after project and supervisor filters</p>
+                        <p className="text-[11px] text-pink-700/80 mt-1.5">Active scope after filters</p>
                     </div>
 
-                    <div className="bg-gradient-to-br from-emerald-50 via-lime-50 to-cyan-50 p-5 rounded-xl border border-emerald-200 shadow-sm shadow-emerald-100">
-                        <div className="flex items-start justify-between gap-3">
+                    <div className="bg-gradient-to-br from-emerald-50 via-lime-50 to-cyan-50 p-3.5 sm:p-4 rounded-xl border border-emerald-200 shadow-xs shadow-emerald-100">
+                        <div className="flex items-start justify-between gap-2.5">
                             <div>
-                                <p className="text-xs font-bold uppercase tracking-wider text-emerald-500">Closed SWO</p>
-                                <p className="text-3xl font-bold text-emerald-700 mt-1">{swoSummaryAnalytics.closedSwos}</p>
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-500">Closed SWO</p>
+                                <p className="text-2xl font-bold text-emerald-700 mt-0.5">{swoSummaryAnalytics.closedSwos}</p>
                             </div>
-                            <div className="w-11 h-11 rounded-xl bg-white/80 text-emerald-500 flex items-center justify-center border border-emerald-100 shadow-sm">
-                                <CheckCircle2 className="w-5 h-5" />
+                            <div className="w-9 h-9 rounded-lg bg-white/80 text-emerald-500 flex items-center justify-center border border-emerald-100 shadow-xs">
+                                <CheckCircle2 className="w-4 h-4" />
                             </div>
                         </div>
-                        <div className="mt-4 h-2.5 rounded-full bg-white/80 overflow-hidden">
+                        <div className="mt-3 h-2 rounded-full bg-white/80 overflow-hidden">
                             <div
                                 className="h-full bg-gradient-to-r from-lime-400 to-emerald-400 rounded-full"
                                 style={{ width: `${swoSummaryAnalytics.totalSwos > 0 ? Math.round((swoSummaryAnalytics.closedSwos / swoSummaryAnalytics.totalSwos) * 100) : 0}%` }}
                             />
                         </div>
-                        <p className="text-xs text-emerald-700/80 mt-2">{swoSummaryAnalytics.openSwos} SWO still open</p>
+                        <p className="text-[11px] text-emerald-700/80 mt-1.5">{swoSummaryAnalytics.openSwos} SWO still open</p>
                     </div>
 
-                    <div className="bg-gradient-to-br from-cyan-50 via-sky-50 to-violet-50 p-5 rounded-xl border border-sky-200 shadow-sm shadow-sky-100">
-                        <div className="flex items-start justify-between gap-3">
+                    <div className="bg-gradient-to-br from-cyan-50 via-sky-50 to-violet-50 p-3.5 sm:p-4 rounded-xl border border-sky-200 shadow-xs shadow-sky-100">
+                        <div className="flex items-start justify-between gap-2.5">
                             <div>
-                                <p className="text-xs font-bold uppercase tracking-wider text-sky-500">Report Frequency</p>
-                                <p className="text-3xl font-bold text-sky-700 mt-1">{swoSummaryAnalytics.overallFrequency}%</p>
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-sky-500">Report Frequency</p>
+                                <p className="text-2xl font-bold text-sky-700 mt-0.5">{swoSummaryAnalytics.overallFrequency}%</p>
                             </div>
-                            <div className="w-11 h-11 rounded-xl bg-white/80 text-violet-500 flex items-center justify-center border border-violet-100 shadow-sm">
-                                <CalendarCheck className="w-5 h-5" />
+                            <div className="w-9 h-9 rounded-lg bg-white/80 text-violet-500 flex items-center justify-center border border-violet-100 shadow-xs">
+                                <CalendarCheck className="w-4 h-4" />
                             </div>
                         </div>
-                        <div className="mt-4 h-2.5 rounded-full bg-white/80 overflow-hidden">
+                        <div className="mt-3 h-2 rounded-full bg-white/80 overflow-hidden">
                             <div className="h-full bg-gradient-to-r from-sky-400 to-violet-400 rounded-full" style={{ width: `${swoSummaryAnalytics.overallFrequency}%` }} />
                         </div>
-                        <p className="text-xs text-sky-700/80 mt-2">{swoSummaryAnalytics.totalSubmittedDays}/{swoSummaryAnalytics.totalExpectedDays} submitted days</p>
+                        <p className="text-[11px] text-sky-700/80 mt-1.5">{swoSummaryAnalytics.totalSubmittedDays}/{swoSummaryAnalytics.totalExpectedDays} submitted days</p>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-                    <div className="xl:col-span-2 bg-gradient-to-br from-white via-sky-50 to-pink-50 p-6 rounded-xl border border-sky-200 shadow-sm shadow-sky-100">
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-3.5 sm:gap-5 w-full min-w-0">
+                    <div className="xl:col-span-2 bg-gradient-to-br from-white via-sky-50 to-pink-50 p-3.5 sm:p-4 rounded-xl border border-sky-200 shadow-xs shadow-sky-100">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-5">
                             <h3 className="text-md font-bold text-sky-900 flex items-center">
                                 <Users className="w-5 h-5 mr-2 text-pink-500" />
@@ -564,7 +564,7 @@ export default function ExecutiveDashboards() {
                                 <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-pink-400" /> Open</span>
                             </div>
                         </div>
-                        <div className="h-80">
+                        <div className="h-64 sm:h-72">
                             {swoSummaryAnalytics.supervisorRows.length === 0 ? (
                                 <div className="h-full flex items-center justify-center text-gray-400 text-sm">ยังไม่มีข้อมูล SWO ตาม Supervisor</div>
                             ) : (
@@ -587,7 +587,7 @@ export default function ExecutiveDashboards() {
                         </div>
                     </div>
 
-                    <div className="bg-gradient-to-br from-violet-50 via-white to-cyan-50 p-6 rounded-xl border border-violet-200 shadow-sm shadow-violet-100">
+                    <div className="bg-gradient-to-br from-violet-50 via-white to-cyan-50 p-3.5 sm:p-4 rounded-xl border border-violet-200 shadow-xs shadow-violet-100">
                         <h3 className="text-md font-bold text-violet-900 mb-4 flex items-center">
                             <CalendarCheck className="w-5 h-5 mr-2 text-cyan-500" />
                             Report Frequency
@@ -630,8 +630,8 @@ export default function ExecutiveDashboards() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-                    <div className="bg-gradient-to-br from-amber-50 via-white to-fuchsia-50 p-6 rounded-xl border border-amber-200 shadow-sm shadow-amber-100">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5 sm:gap-5 w-full min-w-0">
+                    <div className="bg-gradient-to-br from-amber-50 via-white to-fuchsia-50 p-3.5 sm:p-4 rounded-xl border border-amber-200 shadow-xs shadow-amber-100">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-5">
                             <h3 className="text-md font-bold text-amber-900 flex items-center">
                                 <Building2 className="w-5 h-5 mr-2 text-fuchsia-500" />
@@ -663,7 +663,7 @@ export default function ExecutiveDashboards() {
                         </div>
                     </div>
 
-                    <div className="bg-gradient-to-br from-rose-50 via-white to-emerald-50 p-6 rounded-xl border border-rose-200 shadow-sm shadow-rose-100">
+                    <div className="bg-gradient-to-br from-rose-50 via-white to-emerald-50 p-3.5 sm:p-4 rounded-xl border border-rose-200 shadow-xs shadow-rose-100">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-5">
                             <h3 className="text-md font-bold text-rose-900 flex items-center">
                                 <CalendarCheck className="w-5 h-5 mr-2 text-emerald-500" />
@@ -701,7 +701,7 @@ export default function ExecutiveDashboards() {
                     </div>
                 </div>
 
-                <div className="bg-gradient-to-br from-cyan-50 via-white to-orange-50 p-6 rounded-xl border border-cyan-200 shadow-sm shadow-cyan-100">
+                <div className="bg-gradient-to-br from-cyan-50 via-white to-orange-50 p-3.5 sm:p-4 rounded-xl border border-cyan-200 shadow-xs shadow-cyan-100">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-5">
                         <h3 className="text-md font-bold text-cyan-900 flex items-center">
                             <TrendingUp className="w-5 h-5 mr-2 text-orange-500" />
@@ -741,7 +741,7 @@ export default function ExecutiveDashboards() {
 
             {/* Executive Performance Evaluation (STRICTLY Execs Only) */}
             {isExecutive ? (
-                <section className="space-y-6">
+                <section className="space-y-3.5">
                     <div>
                         <h2 className="text-xl font-bold text-gray-900 flex items-center mb-2">
                             <ShieldCheck className="w-6 h-6 mr-2 text-indigo-600" />
@@ -750,10 +750,10 @@ export default function ExecutiveDashboards() {
                         <p className="text-sm text-gray-500">Strictly visible to CD, GM, and MD.</p>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 w-full min-w-0">
 
                         {/* Supervisor Performance */}
-                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-gray-200/90 shadow-xs">
                             <h3 className="text-md font-bold text-gray-800 mb-6 flex items-center">
                                 <Users className="w-5 h-5 mr-2 text-green-600" />
                                 Overall Supervisor SWO Success Rate
@@ -787,7 +787,7 @@ export default function ExecutiveDashboards() {
                         </div>
 
                         {/* SLA Tracking */}
-                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-gray-200/90 shadow-xs">
                             <h3 className="text-md font-bold text-gray-800 mb-6 flex items-center">
                                 <Clock className="w-5 h-5 mr-2 text-orange-500" />
                                 CM/PM Approval SLA (Avg Hours)
